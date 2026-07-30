@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "oxlint src test scripts",
     "test": "vitest run",
-    "bootstrap": "tsx scripts/bootstrapBusiness.ts"
+    "bootstrap": "tsx scripts/bootstrapBusiness.ts",
+    "seed:products": "tsx scripts/seedSampleProducts.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

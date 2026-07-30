@@ -5,9 +5,9 @@
 // לסביבת ייצור בלי לשנות קוד — רק קובץ .env שונה.
 
 import { initializeApp, type FirebaseApp } from "firebase/app";
-import { getFirestore, type Firestore } from "firebase/firestore";
-import { getAuth, type Auth } from "firebase/auth";
-import { getFunctions, type Functions } from "firebase/functions";
+import { getFirestore, connectFirestoreEmulator, type Firestore } from "firebase/firestore";
+import { getAuth, connectAuthEmulator, type Auth } from "firebase/auth";
+import { getFunctions, connectFunctionsEmulator, type Functions } from "firebase/functions";
 
 function requireEnv(key: string): string {
   const value = import.meta.env[key];
@@ -32,3 +32,12 @@ export const app: FirebaseApp = initializeApp(firebaseConfig);
 export const db: Firestore = getFirestore(app);
 export const auth: Auth = getAuth(app);
 export const functions: Functions = getFunctions(app);
+
+// חיבור ל-Firebase Emulator Suite המקומי לפיתוח/בדיקות בלבד — ראו
+// README, "בדיקות מול Firebase Emulator". בפרודקשן VITE_USE_EMULATORS
+// לא מוגדר (או "false") והאפליקציה מתחברת לפרויקט Firebase האמיתי.
+if (import.meta.env.VITE_USE_EMULATORS === "true") {
+  connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+  connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+}
