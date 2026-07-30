@@ -16,6 +16,7 @@ dist-ssr
 .vscode/*
 !.vscode/extensions.json
 .idea
+.claude/
 .DS_Store
 *.suo
 *.ntvs*
@@ -38,6 +39,7 @@ ui-debug.log
 *-debug.log
 serviceAccountKey*.json
 functions/node_modules
+functions/lib
 
 # בדיקות
 coverage/

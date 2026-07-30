@@ -39,3 +39,67 @@ jobs:
           VITE_FIREBASE_MESSAGING_SENDER_ID: "000000000000"
           VITE_FIREBASE_APP_ID: "1:000000000000:web:0000000000000000000000"
           VITE_APP_ENV: development
+
+  functions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install functions dependencies
+        working-directory: functions
+        run: npm install
+
+      - name: Type check
+        working-directory: functions
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: functions
+        run: npm run lint
+
+      - name: Unit tests
+        working-directory: functions
+        run: npm test
+
+      - name: Build
+        working-directory: functions
+        run: npm run build
+
+  emulator-tests:
+    runs-on: ubuntu-latest
+    needs: functions
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install functions dependencies
+        working-directory: functions
+        run: npm install
+
+      - name: Build functions
+        working-directory: functions
+        run: npm run build
+
+      - name: Firestore rules tests (מול Firestore Emulator בפועל)
+        run: npm run test:rules
+
+      - name: Cloud Functions integration tests (מול Auth+Firestore+Functions Emulator בפועל)
+        run: npm run test:functions
