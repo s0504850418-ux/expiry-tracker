@@ -4,6 +4,31 @@ export interface Product {
   unit: string;
   shelfLifeMinutes: number;
   active: boolean;
+  currentRecipeVersionId: string | null;
+}
+
+export interface Ingredient {
+  id: string;
+  name: string;
+  unit: string;
+  currentPricePerUnit: number;
+  active: boolean;
+}
+
+export interface RecipeLine {
+  ingredientId: string;
+  ingredientNameSnapshot: string;
+  quantity: number;
+  unit: string;
+  pricePerUnitSnapshot: number;
+  lineCostSnapshot: number;
+}
+
+export interface RecipeVersion {
+  id: string;
+  versionNumber: number;
+  ingredients: RecipeLine[];
+  totalCostSnapshot: number;
 }
 
 export type BatchStatus = "active" | "used" | "expired" | "discarded" | "archived";

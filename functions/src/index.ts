@@ -11,3 +11,8 @@ export { setStaffPin } from "./auth/setStaffPin";
 export { listActiveStaffNames } from "./staff/listActiveStaffNames";
 export { createBatch } from "./batches/createBatch";
 export { updateBatchStatus } from "./batches/updateBatchStatus";
+export { createProduct } from "./products/createProduct";
+export { updateProduct } from "./products/updateProduct";
+export { createIngredient } from "./ingredients/createIngredient";
+export { updateIngredientPrice } from "./ingredients/updateIngredientPrice";
+export { createRecipeVersion } from "./recipes/createRecipeVersion";

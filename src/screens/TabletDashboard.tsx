@@ -15,6 +15,7 @@ import type { Batch, Product } from "../lib/types";
 import { BatchRow } from "../components/BatchRow";
 import { CreateBatchDialog } from "../components/CreateBatchDialog";
 import { DiscardReasonDialog } from "../components/DiscardReasonDialog";
+import { ManagementScreen } from "./ManagementScreen";
 
 function toDate(value: Timestamp | Date | undefined): Date {
   if (!value) return new Date(0);
@@ -31,6 +32,7 @@ export function TabletDashboard() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [discardTarget, setDiscardTarget] = useState<Batch | null>(null);
   const [busyBatchId, setBusyBatchId] = useState<string | null>(null);
+  const [showManagement, setShowManagement] = useState(false);
 
   useEffect(() => {
     const batchesQuery = query(
@@ -71,6 +73,7 @@ export function TabletDashboard() {
           unit: d.data().unit,
           shelfLifeMinutes: d.data().shelfLifeMinutes,
           active: d.data().active,
+          currentRecipeVersionId: d.data().currentRecipeVersionId ?? null,
         })),
       );
     });
@@ -107,12 +110,21 @@ export function TabletDashboard() {
     }
   }
 
+  if (showManagement) {
+    return <ManagementScreen onClose={() => setShowManagement(false)} />;
+  }
+
   return (
     <main dir="rtl" className="dashboard">
       <header className="dashboard-header">
         <h1>אצוות פעילות (לפי FEFO)</h1>
         <div>
           <span>{claims?.role === "owner" ? "בעל/ת העסק" : "מנהל/ת משמרת"}</span>
+          {claims?.role === "owner" && (
+            <button type="button" onClick={() => setShowManagement(true)}>
+              ניהול מוצרים ומתכונים
+            </button>
+          )}
           <button type="button" onClick={() => signOut()}>
             יציאה
           </button>

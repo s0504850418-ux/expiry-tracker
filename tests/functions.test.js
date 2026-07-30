@@ -319,6 +319,244 @@ test("updateBatchStatus: מעבר ל-discarded דורש סיבה, ואי אפש�
   );
 });
 
+test("createProduct: owner יוצר מוצר, ודוחה שם כפול (case-insensitive)", async () => {
+  const createProduct = httpsCallable(functions, "createProduct");
+
+  const { data } = await callAsOwner(() =>
+    createProduct({
+      businessId: BUSINESS_ID,
+      name: "חמאת שום",
+      unit: "kg",
+      shelfLifeMinutes: 60 * 24 * 5,
+    }),
+  );
+  assert.ok(data.productId);
+
+  await assert.rejects(
+    () =>
+      callAsOwner(() =>
+        createProduct({
+          businessId: BUSINESS_ID,
+          name: "חמאת שום",
+          unit: "kg",
+          shelfLifeMinutes: 60,
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/already-exists");
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    () =>
+      callAsOwner(() =>
+        createProduct({
+          businessId: BUSINESS_ID,
+          name: "חמאת שום",
+          unit: "kg",
+          shelfLifeMinutes: 60,
+        }),
+      ),
+    () => true,
+  );
+
+  // shiftManager לא יכול ליצור מוצר
+  await assert.rejects(
+    () =>
+      callAsStaff(() =>
+        createProduct({
+          businessId: BUSINESS_ID,
+          name: "מוצר אחר",
+          unit: "kg",
+          shelfLifeMinutes: 60,
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/permission-denied");
+      return true;
+    },
+  );
+});
+
+test("updateProduct: owner יכול לעדכן שם/חיי מדף/סטטוס פעילות, shiftManager לא יכול", async () => {
+  const createProduct = httpsCallable(functions, "createProduct");
+  const updateProduct = httpsCallable(functions, "updateProduct");
+
+  const { data: created } = await callAsOwner(() =>
+    createProduct({
+      businessId: BUSINESS_ID,
+      name: "מוצר לעדכון",
+      unit: "unit",
+      shelfLifeMinutes: 60,
+    }),
+  );
+
+  await callAsOwner(() =>
+    updateProduct({
+      businessId: BUSINESS_ID,
+      productId: created.productId,
+      name: "מוצר אחרי עדכון",
+      shelfLifeMinutes: 120,
+      active: false,
+    }),
+  );
+
+  await rulesTestEnv.withSecurityRulesDisabled(async (ctx) => {
+    const snap = await ctx
+      .firestore()
+      .doc(`businesses/${BUSINESS_ID}/products/${created.productId}`)
+      .get();
+    assert.equal(snap.data().name, "מוצר אחרי עדכון");
+    assert.equal(snap.data().shelfLifeMinutes, 120);
+    assert.equal(snap.data().active, false);
+    assert.equal(snap.data().unit, "unit"); // unit לא ניתן לשינוי
+  });
+
+  await assert.rejects(
+    () =>
+      callAsStaff(() =>
+        updateProduct({
+          businessId: BUSINESS_ID,
+          productId: created.productId,
+          active: true,
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/permission-denied");
+      return true;
+    },
+  );
+});
+
+test("createIngredient + updateIngredientPrice: מחיר מרכיב מתעדכן, וגרסת מתכון שומרת snapshot היסטורי", async () => {
+  const createIngredient = httpsCallable(functions, "createIngredient");
+  const updateIngredientPrice = httpsCallable(functions, "updateIngredientPrice");
+  const createProduct = httpsCallable(functions, "createProduct");
+  const createRecipeVersion = httpsCallable(functions, "createRecipeVersion");
+
+  const { data: ingredient } = await callAsOwner(() =>
+    createIngredient({
+      businessId: BUSINESS_ID,
+      name: "עגבניות לבדיקה",
+      unit: "kg",
+      pricePerUnit: 5,
+    }),
+  );
+
+  const { data: product } = await callAsOwner(() =>
+    createProduct({
+      businessId: BUSINESS_ID,
+      name: "רוטב לבדיקת מתכון",
+      unit: "kg",
+      shelfLifeMinutes: 60 * 24,
+    }),
+  );
+
+  const { data: v1 } = await callAsOwner(() =>
+    createRecipeVersion({
+      businessId: BUSINESS_ID,
+      productId: product.productId,
+      lines: [{ ingredientId: ingredient.ingredientId, quantity: 2 }],
+    }),
+  );
+  assert.equal(v1.versionNumber, 1);
+  assert.equal(v1.totalCostSnapshot, 10); // 2kg * 5
+
+  // מעדכנים את המחיר — לא אמור לשנות למפרע את v1
+  await callAsOwner(() =>
+    updateIngredientPrice({
+      businessId: BUSINESS_ID,
+      ingredientId: ingredient.ingredientId,
+      newPricePerUnit: 8,
+    }),
+  );
+
+  const { data: v2 } = await callAsOwner(() =>
+    createRecipeVersion({
+      businessId: BUSINESS_ID,
+      productId: product.productId,
+      lines: [{ ingredientId: ingredient.ingredientId, quantity: 2 }],
+    }),
+  );
+  assert.equal(v2.versionNumber, 2);
+  assert.equal(v2.totalCostSnapshot, 16); // 2kg * 8 (המחיר החדש)
+
+  // shiftManager לא יכול ליצור מרכיב/גרסת מתכון
+  await assert.rejects(
+    () =>
+      callAsStaff(() =>
+        createIngredient({
+          businessId: BUSINESS_ID,
+          name: "מרכיב אסור",
+          unit: "kg",
+          pricePerUnit: 1,
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/permission-denied");
+      return true;
+    },
+  );
+});
+
+test("createRecipeVersion דוחה מרכיב לא קיים ומרכיב כפול באותה גרסה", async () => {
+  const createProduct = httpsCallable(functions, "createProduct");
+  const createIngredient = httpsCallable(functions, "createIngredient");
+  const createRecipeVersion = httpsCallable(functions, "createRecipeVersion");
+
+  const { data: product } = await callAsOwner(() =>
+    createProduct({
+      businessId: BUSINESS_ID,
+      name: "מוצר לבדיקת שגיאות מתכון",
+      unit: "kg",
+      shelfLifeMinutes: 60,
+    }),
+  );
+
+  await assert.rejects(
+    () =>
+      callAsOwner(() =>
+        createRecipeVersion({
+          businessId: BUSINESS_ID,
+          productId: product.productId,
+          lines: [{ ingredientId: "no-such-ingredient", quantity: 1 }],
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/not-found");
+      return true;
+    },
+  );
+
+  const { data: ingredient } = await callAsOwner(() =>
+    createIngredient({
+      businessId: BUSINESS_ID,
+      name: "מרכיב לבדיקת כפילות",
+      unit: "kg",
+      pricePerUnit: 1,
+    }),
+  );
+
+  await assert.rejects(
+    () =>
+      callAsOwner(() =>
+        createRecipeVersion({
+          businessId: BUSINESS_ID,
+          productId: product.productId,
+          lines: [
+            { ingredientId: ingredient.ingredientId, quantity: 1 },
+            { ingredientId: ingredient.ingredientId, quantity: 2 },
+          ],
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/invalid-argument");
+      return true;
+    },
+  );
+});
+
 test("נעילה זמנית אחרי כמה ניסיונות PIN כושלים רצופים", async () => {
   const verifyStaffPin = httpsCallable(functions, "verifyStaffPin");
   let lastErrorCode;
