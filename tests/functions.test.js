@@ -24,6 +24,8 @@ import {
   connectFunctionsEmulator,
   httpsCallable,
 } from "firebase/functions";
+import { initializeApp as initializeAdminApp } from "firebase-admin/app";
+import { getAuth as getAdminAuth } from "firebase-admin/auth";
 
 const PROJECT_ID = "demo-expiry-tracker";
 const BUSINESS_ID = "demoBiz";
@@ -36,6 +38,7 @@ const PRODUCT_SHELF_LIFE_MINUTES = 60 * 24; // יממה
 let rulesTestEnv;
 let auth;
 let functions;
+let adminAuth;
 
 async function callAsOwner(fn) {
   const verifyOwnerCode = httpsCallable(functions, "verifyOwnerCode");
@@ -59,6 +62,27 @@ async function callAsStaff(fn) {
     pin: STAFF_PIN,
   });
   await signInWithCustomToken(auth, data.token);
+  try {
+    return await fn();
+  } finally {
+    await signOut(auth);
+  }
+}
+
+// מדמה "התחברות עם Google" בלי דפדפן/OAuth אמיתי: יוצרת (או משתמשת
+// ב-)משתמש ב-Auth Emulator עם email+emailVerified מוגדרים על רשומת
+// המשתמש עצמה — ה-ID token שינפיק כל sign-in לאותו uid (גם דרך
+// custom token, כמו כאן) יכלול את claims הסטנדרטיים email/email_verified
+// שנגזרים מרשומת המשתמש, בדיוק כמו אחרי Google sign-in אמיתי.
+async function callAsGoogleUser(email, fn) {
+  let userRecord;
+  try {
+    userRecord = await adminAuth.getUserByEmail(email);
+  } catch {
+    userRecord = await adminAuth.createUser({ email, emailVerified: true });
+  }
+  const customToken = await adminAuth.createCustomToken(userRecord.uid);
+  await signInWithCustomToken(auth, customToken);
   try {
     return await fn();
   } finally {
@@ -114,6 +138,9 @@ before(async () => {
   });
   functions = getFunctions(app);
   connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+
+  const adminApp = initializeAdminApp({ projectId: PROJECT_ID }, "admin-test-app");
+  adminAuth = getAdminAuth(adminApp);
 });
 
 after(async () => {
@@ -220,6 +247,51 @@ test("setStaffPin: owner יכול ליצור עובד/ת חדש/ה, וה-PIN ה�
     pin: "1111",
   });
   assert.ok(data.token);
+});
+
+test("addAuthorizedOwnerEmail + claimOwnerAccessViaGoogle: מייל מורשה מקבל role=owner, מייל לא מורשה נדחה", async () => {
+  const addAuthorizedOwnerEmail = httpsCallable(functions, "addAuthorizedOwnerEmail");
+  const claimOwnerAccessViaGoogle = httpsCallable(functions, "claimOwnerAccessViaGoogle");
+  const authorizedEmail = "owner-test@example.com";
+  const strangerEmail = "stranger@example.com";
+
+  await callAsOwner(() =>
+    addAuthorizedOwnerEmail({ businessId: BUSINESS_ID, email: authorizedEmail }),
+  );
+
+  // מייל לא מורשה — נדחה, ולא מקבל claims.
+  await assert.rejects(
+    () =>
+      callAsGoogleUser(strangerEmail, () =>
+        claimOwnerAccessViaGoogle({ businessId: BUSINESS_ID }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/permission-denied");
+      return true;
+    },
+  );
+
+  // shiftManager לא יכול/ה להוסיף מיילים מורשים.
+  await assert.rejects(
+    () =>
+      callAsStaff(() =>
+        addAuthorizedOwnerEmail({ businessId: BUSINESS_ID, email: "other@example.com" }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/permission-denied");
+      return true;
+    },
+  );
+
+  // מייל מורשה — מקבל claims של owner, ואפשר לאמת את זה מה-ID token
+  // אחרי רענון (בדיוק כמו ש-AdminLoginScreen עושה בפועל).
+  await callAsGoogleUser(authorizedEmail, async () => {
+    const { data } = await claimOwnerAccessViaGoogle({ businessId: BUSINESS_ID });
+    assert.equal(data.success, true);
+    const idTokenResult = await auth.currentUser.getIdTokenResult(true);
+    assert.equal(idTokenResult.claims.businessId, BUSINESS_ID);
+    assert.equal(idTokenResult.claims.role, "owner");
+  });
 });
 
 test("listActiveStaffNames מחזיר שמות עובדים פעילים בלי אימות מוקדם", async () => {

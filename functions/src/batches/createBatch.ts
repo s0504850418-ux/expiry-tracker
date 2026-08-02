@@ -82,6 +82,13 @@ export const createBatch = onCall(async (request) => {
     product.shelfLifeMinutes as number,
   );
 
+  // הערה מכוונת: לא שומרים עלות (costSnapshot) על מסמך האצווה עצמו,
+  // למרות שזה היה מפשט דוחות — כי batches ניתן לקריאה גם למנהל/ת
+  // משמרת (FEFO), ועלויות הן נתון כספי ל-owner בלבד (כמו ingredients/
+  // recipeVersions). הדוח הכספי (שלב 7) מצטרף במקום זאת ל-
+  // recipeVersions לפי batch.recipeVersionId — קריאה ששמורה ל-owner
+  // בלבד ב-Rules ממילא.
+
   // clientRequestId, כשקיים, הופך למזהה המסמך עצמו — כך שניסיון שני
   // עם אותו מזהה (לחיצה כפולה, ניסיון חוזר אחרי ניתוק רגעי) נתקל ב-
   // ALREADY_EXISTS מ-create() באופן אטומי בצד השרת, במקום מרוץ בין

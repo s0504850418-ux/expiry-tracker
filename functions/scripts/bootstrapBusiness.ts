@@ -27,11 +27,11 @@ function parseArgs(argv: string[]): Record<string, string> {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const { businessId, name, ownerCode } = args;
+  const { businessId, name, ownerCode, ownerEmail } = args;
 
   if (!businessId || !name || !ownerCode) {
     console.error(
-      "שימוש: npm run bootstrap -- --businessId=<id> --name=<שם> --ownerCode=<קוד>",
+      "שימוש: npm run bootstrap -- --businessId=<id> --name=<שם> --ownerCode=<קוד> [--ownerEmail=<gmail>]",
     );
     process.exit(1);
   }
@@ -64,7 +64,16 @@ async function main() {
     updatedAt: FieldValue.serverTimestamp(),
   });
 
-  console.log(`עסק "${name}" (${businessId}) נוצר בהצלחה עם קוד מנהל.`);
+  if (ownerEmail) {
+    await businessRef.collection("secrets").doc("googleAccess").set({
+      ownerEmails: [ownerEmail.trim().toLowerCase()],
+    });
+  }
+
+  console.log(
+    `עסק "${name}" (${businessId}) נוצר בהצלחה עם קוד מנהל` +
+      (ownerEmail ? ` וגישת Google עבור ${ownerEmail}.` : "."),
+  );
 }
 
 main().catch((err) => {

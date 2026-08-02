@@ -44,6 +44,13 @@ updatedAt: Timestamp
 ```
 **חסום לחלוטין ללקוח** (read+write: false). רק Admin SDK נוגע בזה.
 
+### מסמך `businesses/{businessId}/secrets/googleAccess`
+
+```
+ownerEmails: string[]    // כתובות Gmail מורשות לכניסה למסך הניהול
+```
+**חסום לחלוטין ללקוח**, כמו `secrets/owner` (אותו כלל wildcard ב-Rules). נבדק ע"י `claimOwnerAccessViaGoogle` (Cloud Function) אחרי התחברות Google — לא ב-Rules, כי הלקוח לעולם לא קורא את זה ישירות. מנוהל דרך `addAuthorizedOwnerEmail` (owner-only, מזוהה/ת דרך קוד מנהל קיים).
+
 ### תת-אוסף `businesses/{businessId}/staff/{staffId}`
 
 ```

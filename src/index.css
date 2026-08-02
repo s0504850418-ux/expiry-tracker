@@ -203,4 +203,36 @@ textarea {
     font-size: 0.7rem;
     color: #555;
   }
+
+  .printed-report {
+    direction: rtl;
+    font-family: Arial, sans-serif;
+  }
+
+  .printed-report table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+  }
+
+  .printed-report th,
+  .printed-report td {
+    border: 1px solid #999;
+    padding: 0.4rem;
+    text-align: right;
+    font-size: 0.85rem;
+  }
+}
+
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.audit-table th,
+.audit-table td {
+  border: 1px solid #ddd;
+  padding: 0.5rem;
+  text-align: right;
+  font-size: 0.9rem;
 }
