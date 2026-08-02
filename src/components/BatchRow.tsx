@@ -16,9 +16,6 @@ export function BatchRow({ batch, onMarkUsed, onMarkExpired, onMarkDiscarded, bu
     <li className={`batch-row urgency-${urgency}`}>
       <div className="batch-info">
         <strong>{batch.productNameSnapshot}</strong>
-        <span>
-          {batch.quantity} {batch.unit}
-        </span>
         <span>{formatTimeRemaining(batch.expiresAt)}</span>
       </div>
       <div className="batch-actions">
