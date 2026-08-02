@@ -59,6 +59,10 @@ function validate(data: unknown): Data {
  * "נוצל" ו-"הושלך" באותו רגע אחרי חזרה מניתוק), רק הראשונה שמצליחה
  * "לנעול" את המסמך תבוצע — השנייה נכשלת עם אותה שגיאת
  * failed-precondition הרגילה, לא דורסת בשקט את הראשונה.
+ *
+ * "טיפול" בהתראת תפוגה (שלב 9) = שינוי סטטוס בפועל, לא כפתור
+ * "אישרתי" נפרד — אם קיימת התראה pending לאצווה הזו, היא מסומנת
+ * acknowledged באותה טרנזקציה.
  */
 export const updateBatchStatus = onCall(async (request) => {
   const data = validate(request.data);
@@ -66,9 +70,10 @@ export const updateBatchStatus = onCall(async (request) => {
 
   const db = getFirestore();
   const batchRef = db.doc(`businesses/${data.businessId}/batches/${data.batchId}`);
+  const notifRef = db.doc(`businesses/${data.businessId}/notifications/${data.batchId}`);
 
   await db.runTransaction(async (tx) => {
-    const snap = await tx.get(batchRef);
+    const [snap, notifSnap] = await Promise.all([tx.get(batchRef), tx.get(notifRef)]);
     if (!snap.exists) {
       throw new HttpsError("not-found", "אצווה לא נמצאה");
     }
@@ -91,6 +96,14 @@ export const updateBatchStatus = onCall(async (request) => {
       update.quantity = data.quantity;
     }
     tx.update(batchRef, update);
+
+    if (notifSnap.exists && notifSnap.data()?.status === "pending") {
+      tx.update(notifRef, {
+        status: "acknowledged",
+        acknowledgedAt: FieldValue.serverTimestamp(),
+        acknowledgedByStaffId: member.staffId ?? null,
+      });
+    }
   });
 
   await writeAuditLog({

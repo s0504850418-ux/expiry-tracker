@@ -17,6 +17,7 @@ import { CreateBatchDialog } from "../components/CreateBatchDialog";
 import { DiscardReasonDialog } from "../components/DiscardReasonDialog";
 import { ManagementScreen } from "./ManagementScreen";
 import { QrScannerDialog } from "../scanning/QrScannerDialog";
+import { NotificationsPanel } from "../components/NotificationsPanel";
 import { useOnlineStatus } from "../lib/useOnlineStatus";
 
 function toDate(value: Timestamp | Date | undefined): Date {
@@ -36,7 +37,7 @@ export function TabletDashboard() {
   const [busyBatchId, setBusyBatchId] = useState<string | null>(null);
   const [showManagement, setShowManagement] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
-  const [scannedBatchId, setScannedBatchId] = useState<string | null>(null);
+  const [focusedBatchId, setFocusedBatchId] = useState<string | null>(null);
   const online = useOnlineStatus();
 
   useEffect(() => {
@@ -87,15 +88,15 @@ export function TabletDashboard() {
   }, [businessId]);
 
   const filteredBatches = useMemo(() => {
-    if (scannedBatchId) {
-      return batches.filter((b) => b.id === scannedBatchId);
+    if (focusedBatchId) {
+      return batches.filter((b) => b.id === focusedBatchId);
     }
     const term = search.trim().toLowerCase();
     if (!term) return batches;
     return batches.filter((b) =>
       b.productNameSnapshot.toLowerCase().includes(term),
     );
-  }, [batches, search, scannedBatchId]);
+  }, [batches, search, focusedBatchId]);
 
   async function updateStatus(
     batchId: string,
@@ -154,7 +155,7 @@ export function TabletDashboard() {
           placeholder="חיפוש לפי שם מוצר..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          disabled={!!scannedBatchId}
+          disabled={!!focusedBatchId}
         />
         <button type="button" onClick={() => setShowScanner(true)}>
           סריקת QR
@@ -168,19 +169,23 @@ export function TabletDashboard() {
         </button>
       </div>
 
-      {scannedBatchId && (
+      {focusedBatchId && (
         <div className="dashboard-toolbar">
-          <p>מציג/ה תוצאת סריקה בלבד.</p>
-          <button type="button" onClick={() => setScannedBatchId(null)}>
+          <p>מציג/ה אצווה נבחרת בלבד.</p>
+          <button type="button" onClick={() => setFocusedBatchId(null)}>
             נקה סינון וחזרה לרשימה המלאה
           </button>
         </div>
       )}
 
+      {!focusedBatchId && (
+        <NotificationsPanel batches={batches} onFocusBatch={setFocusedBatchId} />
+      )}
+
       {filteredBatches.length === 0 ? (
         <p>
-          {scannedBatchId
-            ? "האצווה שנסרקה לא נמצאה או שאינה פעילה יותר"
+          {focusedBatchId
+            ? "האצווה המבוקשת לא נמצאה או שאינה פעילה יותר"
             : "אין אצוות פעילות להצגה"}
         </p>
       ) : (
@@ -225,7 +230,7 @@ export function TabletDashboard() {
         <QrScannerDialog
           onClose={() => setShowScanner(false)}
           onScan={(batchId) => {
-            setScannedBatchId(batchId);
+            setFocusedBatchId(batchId);
             setShowScanner(false);
           }}
         />

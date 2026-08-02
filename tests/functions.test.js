@@ -26,6 +26,16 @@ import {
 } from "firebase/functions";
 import { initializeApp as initializeAdminApp } from "firebase-admin/app";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
+// ה-Pub/Sub Emulator הנדרש כדי להפעיל onSchedule "כמו בייצור" לא עלה
+// בסביבת הפיתוח הזו (תקלת firebase-tools על Windows — ראו PR של שלב
+// 9). קוראים ל-processBusiness ישירות במקום זאת: בודק בפועל מול
+// Firestore Emulator אמיתי את כל הלוגיקה, רק לא דרך מנגנון ה-schedule.
+// getTestFirestore (במקום לבנות מופע Firestore מה-firebase-admin של
+// השורש) חיוני: processBusiness משתמש ב-Timestamp מתוך firebase-admin
+// *של functions/* (node_modules נפרד) — מופע Firestore ממקור אחר
+// נדחה ע"י ה-SDK כ"סוג לא תואם", גם אם מבנית זהה.
+import { processBusiness } from "../functions/lib/notifications/checkExpiringBatches.js";
+import { getTestFirestore } from "../functions/lib/testSupport.js";
 
 const PROJECT_ID = "demo-expiry-tracker";
 const BUSINESS_ID = "demoBiz";
@@ -39,6 +49,7 @@ let rulesTestEnv;
 let auth;
 let functions;
 let adminAuth;
+let adminFirestore;
 
 async function callAsOwner(fn) {
   const verifyOwnerCode = httpsCallable(functions, "verifyOwnerCode");
@@ -141,6 +152,7 @@ before(async () => {
 
   const adminApp = initializeAdminApp({ projectId: PROJECT_ID }, "admin-test-app");
   adminAuth = getAdminAuth(adminApp);
+  adminFirestore = getTestFirestore();
 });
 
 after(async () => {
@@ -457,6 +469,115 @@ test("updateBatchStatus: מעבר ל-discarded דורש סיבה, ואי אפש�
       return true;
     },
   );
+});
+
+test("updateBatchStatus מסמנת התראה pending כ-acknowledged אוטומטית כשמטפלים באצווה", async () => {
+  const createBatch = httpsCallable(functions, "createBatch");
+  const updateBatchStatus = httpsCallable(functions, "updateBatchStatus");
+
+  const { data: created } = await callAsStaff(() =>
+    createBatch({
+      businessId: BUSINESS_ID,
+      productId: PRODUCT_ID,
+      quantity: 4,
+      preparedAtClient: new Date().toISOString(),
+    }),
+  );
+
+  // מדמים שה-Scheduled Function כבר יצרה התראה pending לאצווה הזו
+  // (בלי להריץ בפועל את checkExpiringBatches — זה נבדק בנפרד).
+  await rulesTestEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx
+      .firestore()
+      .doc(`businesses/${BUSINESS_ID}/notifications/${created.batchId}`)
+      .set({
+        type: "batchExpiringSoon",
+        batchId: created.batchId,
+        status: "pending",
+        createdAt: new Date(),
+        lastRemindedAt: new Date(),
+        acknowledgedAt: null,
+        acknowledgedByStaffId: null,
+      });
+  });
+
+  await callAsStaff(() =>
+    updateBatchStatus({
+      businessId: BUSINESS_ID,
+      batchId: created.batchId,
+      newStatus: "used",
+    }),
+  );
+
+  await rulesTestEnv.withSecurityRulesDisabled(async (ctx) => {
+    const notifSnap = await ctx
+      .firestore()
+      .doc(`businesses/${BUSINESS_ID}/notifications/${created.batchId}`)
+      .get();
+    assert.equal(notifSnap.data().status, "acknowledged");
+    assert.equal(notifSnap.data().acknowledgedByStaffId, STAFF_ID);
+  });
+});
+
+test("processBusiness (checkExpiringBatches) יוצרת/משדרגת התראות נכון, ולא נוגעת באצוות רחוקות מתפוגה", async () => {
+  const createBatch = httpsCallable(functions, "createBatch");
+  const now = new Date();
+
+  // אצווה עם זמן הכנה שכבר גורם לתפוגה בעוד שעה — בתוך חלון "בקרוב"
+  // (120 דקות), אמורה לקבל התראה batchExpiringSoon.
+  const soonPreparedAt = new Date(now.getTime() - (PRODUCT_SHELF_LIFE_MINUTES - 60) * 60_000);
+  const { data: soonBatch } = await callAsStaff(() =>
+    createBatch({
+      businessId: BUSINESS_ID,
+      productId: PRODUCT_ID,
+      quantity: 1,
+      preparedAtClient: soonPreparedAt.toISOString(),
+    }),
+  );
+
+  // אצווה רחוקה מתפוגה (מוכנה עכשיו, חיי מדף של יממה שלמה) — לא
+  // אמורה לקבל שום התראה.
+  const { data: farBatch } = await callAsStaff(() =>
+    createBatch({
+      businessId: BUSINESS_ID,
+      productId: PRODUCT_ID,
+      quantity: 1,
+      preparedAtClient: now.toISOString(),
+    }),
+  );
+
+  await processBusiness(adminFirestore, BUSINESS_ID, now);
+
+  const soonNotifSnap = await adminFirestore
+    .doc(`businesses/${BUSINESS_ID}/notifications/${soonBatch.batchId}`)
+    .get();
+  assert.equal(soonNotifSnap.exists, true);
+  assert.equal(soonNotifSnap.data().type, "batchExpiringSoon");
+  assert.equal(soonNotifSnap.data().status, "pending");
+
+  const farNotifSnap = await adminFirestore
+    .doc(`businesses/${BUSINESS_ID}/notifications/${farBatch.batchId}`)
+    .get();
+  assert.equal(farNotifSnap.exists, false);
+
+  // הרצה שנייה "בעתיד" (אחרי שהתפוגה כבר עברה בפועל) — אותה התראה
+  // אמורה להישדרג ל-batchExpired, לא להתווסף בכפילות.
+  const later = new Date(
+    soonPreparedAt.getTime() + PRODUCT_SHELF_LIFE_MINUTES * 60_000 + 5 * 60_000,
+  );
+  await processBusiness(adminFirestore, BUSINESS_ID, later);
+
+  const upgradedSnap = await adminFirestore
+    .doc(`businesses/${BUSINESS_ID}/notifications/${soonBatch.batchId}`)
+    .get();
+  assert.equal(upgradedSnap.data().type, "batchExpired");
+  assert.equal(upgradedSnap.data().status, "pending");
+
+  const allNotifsSnap = await adminFirestore
+    .collection(`businesses/${BUSINESS_ID}/notifications`)
+    .where("batchId", "==", soonBatch.batchId)
+    .get();
+  assert.equal(allNotifsSnap.size, 1); // בלי כפילות
 });
 
 test("updateBatchPrintStatus: מעדכן printed/failed לאצווה פעילה, ונדחה לאצווה שאינה פעילה", async () => {

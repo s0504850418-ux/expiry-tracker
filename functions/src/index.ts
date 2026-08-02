@@ -19,3 +19,4 @@ export { updateProduct } from "./products/updateProduct";
 export { createIngredient } from "./ingredients/createIngredient";
 export { updateIngredientPrice } from "./ingredients/updateIngredientPrice";
 export { createRecipeVersion } from "./recipes/createRecipeVersion";
+export { checkExpiringBatches } from "./notifications/checkExpiringBatches";
