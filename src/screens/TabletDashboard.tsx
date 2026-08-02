@@ -74,6 +74,7 @@ export function TabletDashboard() {
           shelfLifeMinutes: d.data().shelfLifeMinutes,
           active: d.data().active,
           currentRecipeVersionId: d.data().currentRecipeVersionId ?? null,
+          partialUsageUpdateFrequency: d.data().partialUsageUpdateFrequency ?? null,
         })),
       );
     });

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
-import type { Product } from "../lib/types";
+import type { PartialUsageUpdateFrequency, Product } from "../lib/types";
 
 interface Props {
   product: Product | null; // null = יצירה חדשה
@@ -21,6 +21,9 @@ export function ProductFormDialog({ product, onClose, onSaved }: Props) {
     product ? String(product.shelfLifeMinutes / (60 * 24)) : "",
   );
   const [active, setActive] = useState(product?.active ?? true);
+  const [partialUsageUpdateFrequency, setPartialUsageUpdateFrequency] = useState<
+    PartialUsageUpdateFrequency | ""
+  >(product?.partialUsageUpdateFrequency ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -34,6 +37,7 @@ export function ProductFormDialog({ product, onClose, onSaved }: Props) {
     setBusy(true);
     setError(null);
     try {
+      const frequency = partialUsageUpdateFrequency === "" ? null : partialUsageUpdateFrequency;
       if (product) {
         const updateProduct = httpsCallable(functions, "updateProduct");
         await updateProduct({
@@ -41,6 +45,7 @@ export function ProductFormDialog({ product, onClose, onSaved }: Props) {
           productId: product.id,
           name: name.trim(),
           shelfLifeMinutes,
+          partialUsageUpdateFrequency: frequency,
           active,
         });
       } else {
@@ -50,6 +55,7 @@ export function ProductFormDialog({ product, onClose, onSaved }: Props) {
           name: name.trim(),
           unit,
           shelfLifeMinutes,
+          partialUsageUpdateFrequency: frequency,
         });
       }
       onSaved();
@@ -97,6 +103,21 @@ export function ProductFormDialog({ product, onClose, onSaved }: Props) {
           value={shelfLifeDays}
           onChange={(e) => setShelfLifeDays(e.target.value)}
         />
+
+        <label htmlFor="product-update-frequency">תדירות עדכון כמות בשימוש חלקי</label>
+        <select
+          id="product-update-frequency"
+          value={partialUsageUpdateFrequency ?? ""}
+          onChange={(e) =>
+            setPartialUsageUpdateFrequency(
+              e.target.value as PartialUsageUpdateFrequency | "",
+            )
+          }
+        >
+          <option value="">ברירת מחדל (בסוף חיי האצווה)</option>
+          <option value="endOfBatchLife">בסוף חיי האצווה — תמיד</option>
+          <option value="endOfDay">כל סוף יום</option>
+        </select>
 
         {product && (
           <label>

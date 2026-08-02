@@ -1,3 +1,5 @@
+export type PartialUsageUpdateFrequency = "endOfBatchLife" | "endOfDay" | null;
+
 export interface Product {
   id: string;
   name: string;
@@ -5,6 +7,7 @@ export interface Product {
   shelfLifeMinutes: number;
   active: boolean;
   currentRecipeVersionId: string | null;
+  partialUsageUpdateFrequency: PartialUsageUpdateFrequency;
 }
 
 export interface Ingredient {
