@@ -8,6 +8,7 @@ export interface Product {
   active: boolean;
   currentRecipeVersionId: string | null;
   partialUsageUpdateFrequency: PartialUsageUpdateFrequency;
+  notifyBeforeExpiryMinutes: number | null;
 }
 
 export interface Ingredient {

@@ -72,6 +72,7 @@ nameLower: string        // לבדיקת ייחודיות שם, case-insensitive
 unit: 'kg' | 'liter' | 'unit'     // קבוע למוצר, אין המרה בין יחידות
 shelfLifeMinutes: number
 partialUsageUpdateFrequency: 'endOfBatchLife' | 'endOfDay' | null   // null = להשתמש בברירת המחדל של העסק
+notifyBeforeExpiryMinutes: number | null   // כמה דקות לפני תפוגה לשלוח התראה; null = להשתמש בערך ברירת המחדל הגלובלי (owner-only, כמו חיי מדף ומחיר — ראו CLAUDE.md)
 currentRecipeVersionId: string | null
 active: boolean          // false = מוצר הופסק, לא נמחק
 createdAt: Timestamp

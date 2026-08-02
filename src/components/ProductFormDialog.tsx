@@ -24,6 +24,11 @@ export function ProductFormDialog({ product, onClose, onSaved }: Props) {
   const [partialUsageUpdateFrequency, setPartialUsageUpdateFrequency] = useState<
     PartialUsageUpdateFrequency | ""
   >(product?.partialUsageUpdateFrequency ?? "");
+  const [notifyBeforeExpiryDays, setNotifyBeforeExpiryDays] = useState(
+    product?.notifyBeforeExpiryMinutes
+      ? String(product.notifyBeforeExpiryMinutes / (60 * 24))
+      : "",
+  );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -34,10 +39,16 @@ export function ProductFormDialog({ product, onClose, onSaved }: Props) {
       setError("יש להזין שם וחיי מדף חיוביים (בימים)");
       return;
     }
+    if (notifyBeforeExpiryDays !== "" && !(Number(notifyBeforeExpiryDays) > 0)) {
+      setError("זמן התראה לפני תפוגה חייב להיות מספר ימים חיובי, או ריק לברירת מחדל");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       const frequency = partialUsageUpdateFrequency === "" ? null : partialUsageUpdateFrequency;
+      const notifyBeforeExpiryMinutes =
+        notifyBeforeExpiryDays === "" ? null : Number(notifyBeforeExpiryDays) * 60 * 24;
       if (product) {
         const updateProduct = httpsCallable(functions, "updateProduct");
         await updateProduct({
@@ -46,6 +57,7 @@ export function ProductFormDialog({ product, onClose, onSaved }: Props) {
           name: name.trim(),
           shelfLifeMinutes,
           partialUsageUpdateFrequency: frequency,
+          notifyBeforeExpiryMinutes,
           active,
         });
       } else {
@@ -56,6 +68,7 @@ export function ProductFormDialog({ product, onClose, onSaved }: Props) {
           unit,
           shelfLifeMinutes,
           partialUsageUpdateFrequency: frequency,
+          notifyBeforeExpiryMinutes,
         });
       }
       onSaved();
@@ -118,6 +131,18 @@ export function ProductFormDialog({ product, onClose, onSaved }: Props) {
           <option value="endOfBatchLife">בסוף חיי האצווה — תמיד</option>
           <option value="endOfDay">כל סוף יום</option>
         </select>
+
+        <label htmlFor="product-notify-before-expiry">
+          זמן התראה לפני תפוגה (ימים) — ריק לברירת מחדל
+        </label>
+        <input
+          id="product-notify-before-expiry"
+          type="number"
+          min="0"
+          step="any"
+          value={notifyBeforeExpiryDays}
+          onChange={(e) => setNotifyBeforeExpiryDays(e.target.value)}
+        />
 
         {product && (
           <label>
