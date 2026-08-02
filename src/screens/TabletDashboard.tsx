@@ -17,6 +17,7 @@ import { CreateBatchDialog } from "../components/CreateBatchDialog";
 import { DiscardReasonDialog } from "../components/DiscardReasonDialog";
 import { ManagementScreen } from "./ManagementScreen";
 import { QrScannerDialog } from "../scanning/QrScannerDialog";
+import { useOnlineStatus } from "../lib/useOnlineStatus";
 
 function toDate(value: Timestamp | Date | undefined): Date {
   if (!value) return new Date(0);
@@ -36,6 +37,7 @@ export function TabletDashboard() {
   const [showManagement, setShowManagement] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [scannedBatchId, setScannedBatchId] = useState<string | null>(null);
+  const online = useOnlineStatus();
 
   useEffect(() => {
     const batchesQuery = query(
@@ -139,6 +141,13 @@ export function TabletDashboard() {
         </div>
       </header>
 
+      {!online && (
+        <p className="error-text">
+          אין חיבור לאינטרנט — הרשימה מוצגת מהעותק המקומי האחרון ועשויה
+          שלא להיות מעודכנת. יצירת אצווה ועדכון סטטוס חסומים עד שהחיבור יחזור.
+        </p>
+      )}
+
       <div className="dashboard-toolbar">
         <input
           type="search"
@@ -153,7 +162,7 @@ export function TabletDashboard() {
         <button
           type="button"
           onClick={() => setShowCreateDialog(true)}
-          disabled={products.length === 0}
+          disabled={products.length === 0 || !online}
         >
           אצווה חדשה
         </button>
@@ -181,6 +190,7 @@ export function TabletDashboard() {
               key={batch.id}
               batch={batch}
               busy={busyBatchId === batch.id}
+              disabled={!online}
               onMarkUsed={() => updateStatus(batch.id, "used")}
               onMarkExpired={() => updateStatus(batch.id, "expired")}
               onMarkDiscarded={() => setDiscardTarget(batch)}

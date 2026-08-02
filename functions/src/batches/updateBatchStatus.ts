@@ -53,6 +53,12 @@ function validate(data: unknown): Data {
  * ואין אפשרות לשנות אצווה שכבר במצב סופי (אין מחיקה/עריכה לעולם —
  * ראו CLAUDE.md). זו גם ההזדמנות היחידה לעדכן כמות (שימוש חלקי),
  * לפי ברירת המחדל "עדכון בסוף חיי האצווה".
+ *
+ * הבדיקה-והכתיבה רצות בתוך טרנזקציית Firestore — אם שני מכשירים
+ * (או שני טאבים) מנסים לשנות את אותה אצווה כמעט בו-זמנית (למשל
+ * "נוצל" ו-"הושלך" באותו רגע אחרי חזרה מניתוק), רק הראשונה שמצליחה
+ * "לנעול" את המסמך תבוצע — השנייה נכשלת עם אותה שגיאת
+ * failed-precondition הרגילה, לא דורסת בשקט את הראשונה.
  */
 export const updateBatchStatus = onCall(async (request) => {
   const data = validate(request.data);
@@ -60,29 +66,32 @@ export const updateBatchStatus = onCall(async (request) => {
 
   const db = getFirestore();
   const batchRef = db.doc(`businesses/${data.businessId}/batches/${data.batchId}`);
-  const snap = await batchRef.get();
-  if (!snap.exists) {
-    throw new HttpsError("not-found", "אצווה לא נמצאה");
-  }
-  const batch = snap.data()!;
-  if (batch.status !== "active") {
-    throw new HttpsError(
-      "failed-precondition",
-      `לא ניתן לשנות סטטוס מ-"${batch.status}" — רק אצווה פעילה ניתנת לעדכון`,
-    );
-  }
 
-  const update: Record<string, unknown> = {
-    status: data.newStatus,
-    lastModifiedAt: FieldValue.serverTimestamp(),
-  };
-  if (data.newStatus === "discarded") {
-    update.discardReason = data.discardReason;
-  }
-  if (data.quantity !== undefined) {
-    update.quantity = data.quantity;
-  }
-  await batchRef.update(update);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(batchRef);
+    if (!snap.exists) {
+      throw new HttpsError("not-found", "אצווה לא נמצאה");
+    }
+    const batch = snap.data()!;
+    if (batch.status !== "active") {
+      throw new HttpsError(
+        "failed-precondition",
+        `לא ניתן לשנות סטטוס מ-"${batch.status}" — רק אצווה פעילה ניתנת לעדכון`,
+      );
+    }
+
+    const update: Record<string, unknown> = {
+      status: data.newStatus,
+      lastModifiedAt: FieldValue.serverTimestamp(),
+    };
+    if (data.newStatus === "discarded") {
+      update.discardReason = data.discardReason;
+    }
+    if (data.quantity !== undefined) {
+      update.quantity = data.quantity;
+    }
+    tx.update(batchRef, update);
+  });
 
   await writeAuditLog({
     businessId: data.businessId,

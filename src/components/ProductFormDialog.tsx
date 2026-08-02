@@ -3,6 +3,7 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
 import type { PartialUsageUpdateFrequency, Product } from "../lib/types";
+import { useOnlineStatus } from "../lib/useOnlineStatus";
 
 interface Props {
   product: Product | null; // null = יצירה חדשה
@@ -26,6 +27,7 @@ export function ProductFormDialog({ product, onClose, onSaved }: Props) {
   >(product?.partialUsageUpdateFrequency ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const online = useOnlineStatus();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -130,10 +132,11 @@ export function ProductFormDialog({ product, onClose, onSaved }: Props) {
           </label>
         )}
 
+        {!online && <p className="error-text">אין חיבור לאינטרנט — לא ניתן לשמור כרגע</p>}
         {error && <p className="error-text">{error}</p>}
 
         <div className="dialog-actions">
-          <button type="submit" disabled={busy}>
+          <button type="submit" disabled={busy || !online}>
             שמירה
           </button>
           <button type="button" onClick={onClose}>

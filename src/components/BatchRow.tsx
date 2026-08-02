@@ -9,9 +9,17 @@ interface Props {
   onMarkExpired: () => void;
   onMarkDiscarded: () => void;
   busy: boolean;
+  disabled?: boolean;
 }
 
-export function BatchRow({ batch, onMarkUsed, onMarkExpired, onMarkDiscarded, busy }: Props) {
+export function BatchRow({
+  batch,
+  onMarkUsed,
+  onMarkExpired,
+  onMarkDiscarded,
+  busy,
+  disabled,
+}: Props) {
   const urgency = urgencyLevel(batch.expiresAt);
   const [printing, setPrinting] = useState(false);
   const [printError, setPrintError] = useState(false);
@@ -40,7 +48,7 @@ export function BatchRow({ batch, onMarkUsed, onMarkExpired, onMarkDiscarded, bu
         <button
           type="button"
           onClick={handlePrint}
-          disabled={printing}
+          disabled={printing || disabled}
           className={batch.printStatus === "failed" ? "urgent-action" : undefined}
         >
           {printing
@@ -49,13 +57,13 @@ export function BatchRow({ batch, onMarkUsed, onMarkExpired, onMarkDiscarded, bu
               ? "נסה שוב להדפיס"
               : "הדפסה חוזרת"}
         </button>
-        <button type="button" onClick={onMarkUsed} disabled={busy}>
+        <button type="button" onClick={onMarkUsed} disabled={busy || disabled}>
           נוצל
         </button>
-        <button type="button" onClick={onMarkExpired} disabled={busy}>
+        <button type="button" onClick={onMarkExpired} disabled={busy || disabled}>
           פג תוקף
         </button>
-        <button type="button" onClick={onMarkDiscarded} disabled={busy}>
+        <button type="button" onClick={onMarkDiscarded} disabled={busy || disabled}>
           הושלך
         </button>
       </div>

@@ -48,20 +48,22 @@ export const updateBatchPrintStatus = onCall(async (request) => {
 
   const db = getFirestore();
   const batchRef = db.doc(`businesses/${data.businessId}/batches/${data.batchId}`);
-  const snap = await batchRef.get();
-  if (!snap.exists) {
-    throw new HttpsError("not-found", "אצווה לא נמצאה");
-  }
-  if (snap.data()!.status !== "active") {
-    throw new HttpsError(
-      "failed-precondition",
-      "לא ניתן לעדכן סטטוס הדפסה לאצווה שאינה פעילה",
-    );
-  }
 
-  await batchRef.update({
-    printStatus: data.printStatus,
-    lastModifiedAt: FieldValue.serverTimestamp(),
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(batchRef);
+    if (!snap.exists) {
+      throw new HttpsError("not-found", "אצווה לא נמצאה");
+    }
+    if (snap.data()!.status !== "active") {
+      throw new HttpsError(
+        "failed-precondition",
+        "לא ניתן לעדכן סטטוס הדפסה לאצווה שאינה פעילה",
+      );
+    }
+    tx.update(batchRef, {
+      printStatus: data.printStatus,
+      lastModifiedAt: FieldValue.serverTimestamp(),
+    });
   });
 
   await writeAuditLog({

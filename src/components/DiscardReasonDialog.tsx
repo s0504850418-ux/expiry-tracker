@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Batch } from "../lib/types";
+import { useOnlineStatus } from "../lib/useOnlineStatus";
 
 interface Props {
   batch: Batch;
@@ -12,6 +13,7 @@ export function DiscardReasonDialog({ batch, onClose, onConfirm }: Props) {
   const [quantity, setQuantity] = useState(String(batch.quantity));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const online = useOnlineStatus();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -57,10 +59,11 @@ export function DiscardReasonDialog({ batch, onClose, onConfirm }: Props) {
           autoFocus
         />
 
+        {!online && <p className="error-text">אין חיבור לאינטרנט — לא ניתן לשמור כרגע</p>}
         {error && <p className="error-text">{error}</p>}
 
         <div className="dialog-actions">
-          <button type="submit" disabled={busy}>
+          <button type="submit" disabled={busy || !online}>
             אישור
           </button>
           <button type="button" onClick={onClose}>

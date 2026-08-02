@@ -3,6 +3,7 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
 import type { Ingredient } from "../lib/types";
+import { useOnlineStatus } from "../lib/useOnlineStatus";
 
 interface Props {
   ingredient: Ingredient | null; // null = יצירה חדשה, אחרת = עדכון מחיר בלבד
@@ -18,6 +19,7 @@ export function IngredientFormDialog({ ingredient, onClose, onSaved }: Props) {
   );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const online = useOnlineStatus();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -90,10 +92,11 @@ export function IngredientFormDialog({ ingredient, onClose, onSaved }: Props) {
           autoFocus={!!ingredient}
         />
 
+        {!online && <p className="error-text">אין חיבור לאינטרנט — לא ניתן לשמור כרגע</p>}
         {error && <p className="error-text">{error}</p>}
 
         <div className="dialog-actions">
-          <button type="submit" disabled={busy}>
+          <button type="submit" disabled={busy || !online}>
             שמירה
           </button>
           <button type="button" onClick={onClose}>

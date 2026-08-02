@@ -4,6 +4,7 @@ import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
 import type { Ingredient, Product, RecipeVersion } from "../lib/types";
+import { useOnlineStatus } from "../lib/useOnlineStatus";
 
 interface Props {
   product: Product;
@@ -23,6 +24,7 @@ export function RecipeEditorDialog({ product, ingredients, onClose }: Props) {
   ]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const online = useOnlineStatus();
 
   useEffect(() => {
     const businessId = getBusinessId();
@@ -149,10 +151,11 @@ export function RecipeEditorDialog({ product, ingredients, onClose }: Props) {
           </button>
 
           {ingredients.length === 0 && <p>יש ליצור מרכיבים לפני יצירת מתכון</p>}
+          {!online && <p className="error-text">אין חיבור לאינטרנט — לא ניתן לשמור כרגע</p>}
           {error && <p className="error-text">{error}</p>}
 
           <div className="dialog-actions">
-            <button type="submit" disabled={busy || ingredients.length === 0}>
+            <button type="submit" disabled={busy || !online || ingredients.length === 0}>
               שמירת גרסה חדשה
             </button>
             <button type="button" onClick={onClose}>

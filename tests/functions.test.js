@@ -265,6 +265,74 @@ test("createBatch יוצר אצווה עם expiresAt מחושב נכון, ודו
   );
 });
 
+test("createBatch עם clientRequestId זהה מחזירה את אותה אצווה — לא יוצרת כפולה (מניעת שליחה כפולה)", async () => {
+  const createBatch = httpsCallable(functions, "createBatch");
+  const clientRequestId = `test-idempotency-${Date.now()}`;
+  const preparedAtClient = new Date().toISOString();
+
+  const { data: first } = await callAsStaff(() =>
+    createBatch({
+      businessId: BUSINESS_ID,
+      productId: PRODUCT_ID,
+      quantity: 7,
+      preparedAtClient,
+      clientRequestId,
+    }),
+  );
+
+  // "ניסיון חוזר" עם אותו clientRequestId — מדמה לחיצה כפולה או ריטריי
+  // אחרי ניתוק רגעי שבו התשובה המקורית לא הגיעה ללקוח.
+  const { data: retry } = await callAsStaff(() =>
+    createBatch({
+      businessId: BUSINESS_ID,
+      productId: PRODUCT_ID,
+      quantity: 7,
+      preparedAtClient,
+      clientRequestId,
+    }),
+  );
+
+  assert.equal(retry.batchId, first.batchId);
+  assert.equal(retry.expiresAt, first.expiresAt);
+});
+
+test("updateBatchStatus: שתי קריאות בו-זמנית על אותה אצווה — רק אחת מצליחה (טרנזקציה מונעת מרוץ)", async () => {
+  const createBatch = httpsCallable(functions, "createBatch");
+  const updateBatchStatus = httpsCallable(functions, "updateBatchStatus");
+
+  const { data: created } = await callAsStaff(() =>
+    createBatch({
+      businessId: BUSINESS_ID,
+      productId: PRODUCT_ID,
+      quantity: 1,
+      preparedAtClient: new Date().toISOString(),
+    }),
+  );
+
+  const results = await callAsStaff(() =>
+    Promise.allSettled([
+      updateBatchStatus({
+        businessId: BUSINESS_ID,
+        batchId: created.batchId,
+        newStatus: "used",
+      }),
+      updateBatchStatus({
+        businessId: BUSINESS_ID,
+        batchId: created.batchId,
+        newStatus: "discarded",
+        discardReason: "מרוץ בין שני מכשירים",
+        quantity: 0,
+      }),
+    ]),
+  );
+
+  const succeeded = results.filter((r) => r.status === "fulfilled");
+  const failed = results.filter((r) => r.status === "rejected");
+  assert.equal(succeeded.length, 1);
+  assert.equal(failed.length, 1);
+  assert.equal(failed[0].reason.code, "functions/failed-precondition");
+});
+
 test("updateBatchStatus: מעבר ל-discarded דורש סיבה, ואי אפשר לשנות אצווה שכבר במצב סופי", async () => {
   const createBatch = httpsCallable(functions, "createBatch");
   const updateBatchStatus = httpsCallable(functions, "updateBatchStatus");

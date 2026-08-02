@@ -5,6 +5,7 @@ import { getBusinessId } from "../lib/businessId";
 import type { Product } from "../lib/types";
 import { printBatchLabel } from "../printing/printBatchLabel";
 import type { PrintableBatch } from "../printing/printBatchLabel";
+import { useOnlineStatus } from "../lib/useOnlineStatus";
 
 interface Props {
   products: Product[];
@@ -29,6 +30,13 @@ export function CreateBatchDialog({ products, onClose, onCreated }: Props) {
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState<Phase>("form");
   const [createdBatch, setCreatedBatch] = useState<PrintableBatch | null>(null);
+
+  // מזהה יציב לכל "ניסיון יצירה" אחד (כל עוד הדיאלוג הזה פתוח) —
+  // אם קריאת createBatch נכשלת בגלל רשת ומנסים שוב, זה אותו מזהה,
+  // כך שהשרת יזהה ניסיון חוזר ולא ייצור אצווה כפולה. ראו
+  // functions/src/batches/createBatch.ts.
+  const [clientRequestId] = useState(() => crypto.randomUUID());
+  const online = useOnlineStatus();
 
   async function attemptPrint(batch: PrintableBatch) {
     setPhase("printing");
@@ -58,6 +66,7 @@ export function CreateBatchDialog({ products, onClose, onCreated }: Props) {
           productId: string;
           quantity: number;
           preparedAtClient: string;
+          clientRequestId: string;
         },
         { batchId: string; expiresAt: string }
       >(functions, "createBatch");
@@ -66,6 +75,7 @@ export function CreateBatchDialog({ products, onClose, onCreated }: Props) {
         productId,
         quantity: quantityNumber,
         preparedAtClient: preparedAtClient.toISOString(),
+        clientRequestId,
       });
 
       const batch: PrintableBatch = {
@@ -153,10 +163,11 @@ export function CreateBatchDialog({ products, onClose, onCreated }: Props) {
           onChange={(e) => setPreparedAt(e.target.value)}
         />
 
+        {!online && <p className="error-text">אין חיבור לאינטרנט — לא ניתן ליצור כרגע</p>}
         {error && <p className="error-text">{error}</p>}
 
         <div className="dialog-actions">
-          <button type="submit" disabled={busy || products.length === 0}>
+          <button type="submit" disabled={busy || !online || products.length === 0}>
             יצירה
           </button>
           <button type="button" onClick={onClose}>

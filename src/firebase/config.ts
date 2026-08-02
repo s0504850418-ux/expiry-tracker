@@ -5,7 +5,12 @@
 // לסביבת ייצור בלי לשנות קוד — רק קובץ .env שונה.
 
 import { initializeApp, type FirebaseApp } from "firebase/app";
-import { getFirestore, connectFirestoreEmulator, type Firestore } from "firebase/firestore";
+import {
+  initializeFirestore,
+  connectFirestoreEmulator,
+  persistentLocalCache,
+  type Firestore,
+} from "firebase/firestore";
 import { getAuth, connectAuthEmulator, type Auth } from "firebase/auth";
 import { getFunctions, connectFunctionsEmulator, type Functions } from "firebase/functions";
 
@@ -29,7 +34,14 @@ const firebaseConfig = {
 };
 
 export const app: FirebaseApp = initializeApp(firebaseConfig);
-export const db: Firestore = getFirestore(app);
+
+// עבודה אופליין דרך Firestore persistence מובנה (CLAUDE.md) — נתונים
+// שנטענו פעם אחת (רשימת אצוות/מוצרים) נשארים זמינים לקריאה גם בלי
+// חיבור, ומסתנכרנים אוטומטית כשהחיבור חוזר. יחיד לטאב אחד (טאבלט
+// אחד, טאב אחד בפועל) — לא multi-tab.
+export const db: Firestore = initializeFirestore(app, {
+  localCache: persistentLocalCache({}),
+});
 export const auth: Auth = getAuth(app);
 export const functions: Functions = getFunctions(app);
 

@@ -3,6 +3,7 @@ import { httpsCallable, type FunctionsError } from "firebase/functions";
 import { signInWithCustomToken } from "firebase/auth";
 import { auth, functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
+import { useOnlineStatus } from "../lib/useOnlineStatus";
 
 type Mode = "chooseRole" | "ownerCode" | "staffPicker" | "staffPin";
 
@@ -33,6 +34,7 @@ export function LoginScreen() {
   const [selectedStaff, setSelectedStaff] = useState<StaffOption | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const online = useOnlineStatus();
 
   const businessId = getBusinessId();
 
@@ -99,12 +101,18 @@ export function LoginScreen() {
     <main dir="rtl" className="login-screen">
       <h1>מערכת ניהול תאריכי תפוגה</h1>
 
+      {!online && (
+        <p className="error-text">
+          אין חיבור לאינטרנט — לא ניתן להתחבר כרגע. ההתחברות דורשת רשת.
+        </p>
+      )}
+
       {mode === "chooseRole" && (
         <div className="button-stack">
           <button type="button" onClick={() => setMode("ownerCode")}>
             בעל/ת העסק
           </button>
-          <button type="button" onClick={openStaffPicker} disabled={busy}>
+          <button type="button" onClick={openStaffPicker} disabled={busy || !online}>
             מנהל/ת משמרת
           </button>
         </div>
@@ -121,7 +129,7 @@ export function LoginScreen() {
             onChange={(e) => setCode(e.target.value)}
             autoFocus
           />
-          <button type="submit" disabled={busy || code.length === 0}>
+          <button type="submit" disabled={busy || !online || code.length === 0}>
             כניסה
           </button>
           <button type="button" onClick={() => setMode("chooseRole")}>
@@ -164,7 +172,7 @@ export function LoginScreen() {
             onChange={(e) => setPin(e.target.value)}
             autoFocus
           />
-          <button type="submit" disabled={busy || pin.length === 0}>
+          <button type="submit" disabled={busy || !online || pin.length === 0}>
             כניסה
           </button>
           <button type="button" onClick={() => setMode("staffPicker")}>
