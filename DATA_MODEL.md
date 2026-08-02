@@ -121,7 +121,7 @@ preparedAtClient: Timestamp       // מה שהעובד הזין במכשיר
 preparedAtServer: Timestamp       // זמן קבלה בשרת — לזיהוי חריגות/ניתוק
 expiresAt: Timestamp              // מחושב מ-preparedAtClient + shelfLifeMinutes (לא מ-preparedAtServer, כדי שניתוק זמני לא יעוות את התאריך האמיתי)
 status: 'active' | 'used' | 'expired' | 'discarded' | 'archived'
-discardReason: string | null      // חובה כשסטטוס = discarded
+discardReason: string | null      // חובה כשסטטוס = discarded; מרשימה סגורה וקבועה מראש (ראו functions/src/lib/discardReasons.ts), לא טקסט חופשי
 printStatus: 'pending' | 'printed' | 'failed'
 createdByRole: 'owner' | 'shiftManager'
 createdByStaffId: string | null

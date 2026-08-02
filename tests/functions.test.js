@@ -298,7 +298,7 @@ test("updateBatchStatus: מעבר ל-discarded דורש סיבה, ואי אפש�
       businessId: BUSINESS_ID,
       batchId: created.batchId,
       newStatus: "discarded",
-      discardReason: "נשפך על הרצפה",
+      discardReason: "בעיית איכות",
       quantity: 0,
     }),
   );
