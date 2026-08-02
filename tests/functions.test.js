@@ -319,6 +319,69 @@ test("updateBatchStatus: מעבר ל-discarded דורש סיבה, ואי אפש�
   );
 });
 
+test("updateBatchPrintStatus: מעדכן printed/failed לאצווה פעילה, ונדחה לאצווה שאינה פעילה", async () => {
+  const createBatch = httpsCallable(functions, "createBatch");
+  const updateBatchStatus = httpsCallable(functions, "updateBatchStatus");
+  const updateBatchPrintStatus = httpsCallable(functions, "updateBatchPrintStatus");
+
+  const { data: created } = await callAsStaff(() =>
+    createBatch({
+      businessId: BUSINESS_ID,
+      productId: PRODUCT_ID,
+      quantity: 2,
+      preparedAtClient: new Date().toISOString(),
+    }),
+  );
+
+  await callAsStaff(() =>
+    updateBatchPrintStatus({
+      businessId: BUSINESS_ID,
+      batchId: created.batchId,
+      printStatus: "failed",
+    }),
+  );
+
+  // אפשר לנסות שוב אחרי כשל (הדפסה חוזרת) כל עוד האצווה עדיין פעילה.
+  await callAsStaff(() =>
+    updateBatchPrintStatus({
+      businessId: BUSINESS_ID,
+      batchId: created.batchId,
+      printStatus: "printed",
+    }),
+  );
+
+  await rulesTestEnv.withSecurityRulesDisabled(async (ctx) => {
+    const snap = await ctx
+      .firestore()
+      .doc(`businesses/${BUSINESS_ID}/batches/${created.batchId}`)
+      .get();
+    assert.equal(snap.data().printStatus, "printed");
+  });
+
+  await callAsStaff(() =>
+    updateBatchStatus({
+      businessId: BUSINESS_ID,
+      batchId: created.batchId,
+      newStatus: "used",
+    }),
+  );
+
+  await assert.rejects(
+    () =>
+      callAsStaff(() =>
+        updateBatchPrintStatus({
+          businessId: BUSINESS_ID,
+          batchId: created.batchId,
+          printStatus: "printed",
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/failed-precondition");
+      return true;
+    },
+  );
+});
+
 test("createProduct: owner יוצר מוצר, ודוחה שם כפול (case-insensitive)", async () => {
   const createProduct = httpsCallable(functions, "createProduct");
 

@@ -170,3 +170,37 @@ textarea {
 .recipe-line input {
   flex: 1;
 }
+
+.urgent-action {
+  border-color: #c0392b;
+  color: #c0392b;
+  font-weight: bold;
+}
+
+#print-label-root {
+  display: none;
+}
+
+@media print {
+  body > *:not(#print-label-root) {
+    display: none !important;
+  }
+
+  #print-label-root {
+    display: block !important;
+  }
+
+  .printed-label {
+    text-align: center;
+  }
+
+  .printed-label img {
+    width: 150px;
+    height: 150px;
+  }
+
+  .printed-label-batch-id {
+    font-size: 0.7rem;
+    color: #555;
+  }
+}

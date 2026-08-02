@@ -35,6 +35,7 @@ export interface RecipeVersion {
 }
 
 export type BatchStatus = "active" | "used" | "expired" | "discarded" | "archived";
+export type PrintStatus = "pending" | "printed" | "failed";
 
 export interface Batch {
   id: string;
@@ -46,4 +47,5 @@ export interface Batch {
   preparedAtClient: Date;
   status: BatchStatus;
   discardReason: string | null;
+  printStatus: PrintStatus;
 }

@@ -11,6 +11,7 @@ export { setStaffPin } from "./auth/setStaffPin";
 export { listActiveStaffNames } from "./staff/listActiveStaffNames";
 export { createBatch } from "./batches/createBatch";
 export { updateBatchStatus } from "./batches/updateBatchStatus";
+export { updateBatchPrintStatus } from "./batches/updateBatchPrintStatus";
 export { createProduct } from "./products/createProduct";
 export { updateProduct } from "./products/updateProduct";
 export { createIngredient } from "./ingredients/createIngredient";

@@ -3,12 +3,16 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
 import type { Product } from "../lib/types";
+import { printBatchLabel } from "../printing/printBatchLabel";
+import type { PrintableBatch } from "../printing/printBatchLabel";
 
 interface Props {
   products: Product[];
   onClose: () => void;
   onCreated: () => void;
 }
+
+type Phase = "form" | "printing" | "print-failed";
 
 function nowForDatetimeLocal(): string {
   const now = new Date();
@@ -23,6 +27,18 @@ export function CreateBatchDialog({ products, onClose, onCreated }: Props) {
   const [preparedAt, setPreparedAt] = useState(nowForDatetimeLocal());
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<Phase>("form");
+  const [createdBatch, setCreatedBatch] = useState<PrintableBatch | null>(null);
+
+  async function attemptPrint(batch: PrintableBatch) {
+    setPhase("printing");
+    const result = await printBatchLabel(batch);
+    if (result.ok) {
+      onCreated();
+    } else {
+      setPhase("print-failed");
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -34,6 +50,8 @@ export function CreateBatchDialog({ products, onClose, onCreated }: Props) {
     setBusy(true);
     setError(null);
     try {
+      const product = products.find((p) => p.id === productId)!;
+      const preparedAtClient = new Date(preparedAt);
       const createBatch = httpsCallable<
         {
           businessId: string;
@@ -43,18 +61,60 @@ export function CreateBatchDialog({ products, onClose, onCreated }: Props) {
         },
         { batchId: string; expiresAt: string }
       >(functions, "createBatch");
-      await createBatch({
+      const { data } = await createBatch({
         businessId: getBusinessId(),
         productId,
         quantity: quantityNumber,
-        preparedAtClient: new Date(preparedAt).toISOString(),
+        preparedAtClient: preparedAtClient.toISOString(),
       });
-      onCreated();
+
+      const batch: PrintableBatch = {
+        id: data.batchId,
+        productNameSnapshot: product.name,
+        quantity: quantityNumber,
+        unit: product.unit,
+        preparedAtClient,
+        expiresAt: new Date(data.expiresAt),
+      };
+      setCreatedBatch(batch);
+      await attemptPrint(batch);
     } catch {
       setError("יצירת האצווה נכשלה — נסה/י שוב");
     } finally {
       setBusy(false);
     }
+  }
+
+  if (phase === "printing") {
+    return (
+      <div className="dialog-backdrop" dir="rtl">
+        <div className="dialog">
+          <p>מדפיסה מדבקה...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === "print-failed" && createdBatch) {
+    return (
+      <div className="dialog-backdrop" dir="rtl">
+        <div className="dialog">
+          <h2>ההדפסה נכשלה</h2>
+          <p className="error-text">
+            האצווה נוצרה ופעילה, אבל לא הודפסה מדבקה. אפשר לנסות שוב עכשיו, או
+            להדפיס מאוחר יותר מרשימת האצוות ("הדפסה חוזרת").
+          </p>
+          <div className="dialog-actions">
+            <button type="button" onClick={() => attemptPrint(createdBatch)}>
+              נסה שוב
+            </button>
+            <button type="button" onClick={onCreated}>
+              המשך בלי הדפסה עכשיו
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
