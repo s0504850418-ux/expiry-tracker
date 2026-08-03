@@ -2,6 +2,7 @@ import { useState } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
+import { Spinner } from "../components/Spinner";
 
 export function ManageAdminAccess() {
   const [email, setEmail] = useState("");
@@ -44,10 +45,10 @@ export function ManageAdminAccess() {
           required
         />
         <button type="submit" disabled={busy}>
-          הוספת גישה
+          {busy && <Spinner />} הוספת גישה
         </button>
       </form>
-      {message && <p>{message}</p>}
+      {message && <p className="success-text">{message}</p>}
       {error && <p className="error-text">{error}</p>}
     </div>
   );

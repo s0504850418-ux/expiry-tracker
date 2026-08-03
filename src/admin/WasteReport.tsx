@@ -3,6 +3,7 @@ import { collection, doc, getDoc, getDocs, query, Timestamp, where } from "fireb
 import { db } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
 import { exportWasteReportPdf } from "./exportWasteReportPdf";
+import { Spinner } from "../components/Spinner";
 
 type BatchStatus = "active" | "used" | "expired" | "discarded" | "archived";
 
@@ -141,7 +142,7 @@ export function WasteReport() {
           onChange={(e) => setEndDate(e.target.value)}
         />
         <button type="button" onClick={generateReport} disabled={busy}>
-          {busy ? "מפיק דוח..." : "הפקת דוח"}
+          {busy && <Spinner />} {busy ? "מפיק דוח..." : "הפקת דוח"}
         </button>
       </div>
 

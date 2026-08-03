@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Batch } from "../lib/types";
 import { useOnlineStatus } from "../lib/useOnlineStatus";
 import { DISCARD_REASONS } from "../lib/discardReasons";
+import { Spinner } from "./Spinner";
 
 interface Props {
   batch: Batch;
@@ -72,7 +73,7 @@ export function DiscardReasonDialog({ batch, onClose, onConfirm }: Props) {
 
         <div className="dialog-actions">
           <button type="submit" disabled={busy || !online}>
-            אישור
+            {busy && <Spinner />} אישור
           </button>
           <button type="button" onClick={onClose}>
             ביטול

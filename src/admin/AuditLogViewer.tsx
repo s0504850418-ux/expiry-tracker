@@ -64,7 +64,7 @@ export function AuditLogViewer() {
       {rows.length === 0 ? (
         <p>אין עדיין רשומות ביומן</p>
       ) : (
-        <div style={{ overflowX: "auto" }}>
+        <div className="table-scroll">
           <table className="audit-table">
             <thead>
               <tr>

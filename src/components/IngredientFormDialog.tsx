@@ -4,6 +4,7 @@ import { functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
 import type { Ingredient } from "../lib/types";
 import { useOnlineStatus } from "../lib/useOnlineStatus";
+import { Spinner } from "./Spinner";
 
 interface Props {
   ingredient: Ingredient | null; // null = יצירה חדשה, אחרת = עדכון מחיר בלבד
@@ -97,7 +98,7 @@ export function IngredientFormDialog({ ingredient, onClose, onSaved }: Props) {
 
         <div className="dialog-actions">
           <button type="submit" disabled={busy || !online}>
-            שמירה
+            {busy && <Spinner />} שמירה
           </button>
           <button type="button" onClick={onClose}>
             ביטול

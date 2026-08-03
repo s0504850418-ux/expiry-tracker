@@ -7,6 +7,7 @@ import {
 import { httpsCallable, type FunctionsError } from "firebase/functions";
 import { auth, functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
+import { Spinner } from "../components/Spinner";
 
 function errorMessage(err: unknown): string {
   const code = (err as FunctionsError | undefined)?.code;
@@ -60,7 +61,7 @@ export function AdminLoginScreen() {
       <h1>מסך ניהול</h1>
       <p>כניסה עם חשבון Google מורשה בלבד</p>
       <button type="button" onClick={handleGoogleSignIn} disabled={busy}>
-        {busy ? "מתחבר/ת..." : "התחברות עם Google"}
+        {busy && <Spinner />} {busy ? "מתחבר/ת..." : "התחברות עם Google"}
       </button>
       {error && <p className="error-text">{error}</p>}
     </main>

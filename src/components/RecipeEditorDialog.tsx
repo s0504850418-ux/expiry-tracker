@@ -5,6 +5,7 @@ import { db, functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
 import type { Ingredient, Product, RecipeVersion } from "../lib/types";
 import { useOnlineStatus } from "../lib/useOnlineStatus";
+import { Spinner } from "./Spinner";
 
 interface Props {
   product: Product;
@@ -156,7 +157,7 @@ export function RecipeEditorDialog({ product, ingredients, onClose }: Props) {
 
           <div className="dialog-actions">
             <button type="submit" disabled={busy || !online || ingredients.length === 0}>
-              שמירת גרסה חדשה
+              {busy && <Spinner />} שמירת גרסה חדשה
             </button>
             <button type="button" onClick={onClose}>
               סגירה

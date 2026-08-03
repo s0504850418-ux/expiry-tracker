@@ -15,15 +15,21 @@ import type { Batch, Product } from "../lib/types";
 import { BatchRow } from "../components/BatchRow";
 import { CreateBatchDialog } from "../components/CreateBatchDialog";
 import { DiscardReasonDialog } from "../components/DiscardReasonDialog";
-import { ManagementScreen } from "./ManagementScreen";
 import { QrScannerDialog } from "../scanning/QrScannerDialog";
 import { NotificationsPanel } from "../components/NotificationsPanel";
 import { useOnlineStatus } from "../lib/useOnlineStatus";
+import { EnvBadge } from "../components/EnvBadge";
 
 function toDate(value: Timestamp | Date | undefined): Date {
   if (!value) return new Date(0);
   return value instanceof Timestamp ? value.toDate() : value;
 }
+
+const STATUS_TOAST_LABEL: Record<"used" | "expired" | "discarded", string> = {
+  used: "הסטטוס עודכן ל'נוצל'",
+  expired: "הסטטוס עודכן ל'פג תוקף'",
+  discarded: "האצווה סומנה כהושלכה",
+};
 
 export function TabletDashboard() {
   const { claims, signOut } = useAuth();
@@ -35,10 +41,16 @@ export function TabletDashboard() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [discardTarget, setDiscardTarget] = useState<Batch | null>(null);
   const [busyBatchId, setBusyBatchId] = useState<string | null>(null);
-  const [showManagement, setShowManagement] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [focusedBatchId, setFocusedBatchId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const online = useOnlineStatus();
+
+  function flashToast(message: string) {
+    setToast(message);
+    window.setTimeout(() => setToast(null), 2500);
+  }
 
   useEffect(() => {
     const batchesQuery = query(
@@ -105,6 +117,7 @@ export function TabletDashboard() {
     extra?: { quantity?: number; discardReason?: string },
   ) {
     setBusyBatchId(batchId);
+    setActionError(null);
     try {
       const updateBatchStatus = httpsCallable<
         {
@@ -122,21 +135,19 @@ export function TabletDashboard() {
     }
   }
 
-  if (showManagement) {
-    return <ManagementScreen onClose={() => setShowManagement(false)} />;
-  }
-
   return (
     <main dir="rtl" className="dashboard">
+      {toast && (
+        <div className="toast-stack">
+          <div className="toast toast-success">{toast}</div>
+        </div>
+      )}
+
       <header className="dashboard-header">
         <h1>אצוות פעילות (לפי FEFO)</h1>
         <div>
+          <EnvBadge />
           <span>{claims?.role === "owner" ? "בעל/ת העסק" : "מנהל/ת משמרת"}</span>
-          {claims?.role === "owner" && (
-            <button type="button" onClick={() => setShowManagement(true)}>
-              ניהול מוצרים ומתכונים
-            </button>
-          )}
           <button type="button" onClick={() => signOut()}>
             יציאה
           </button>
@@ -149,6 +160,8 @@ export function TabletDashboard() {
           שלא להיות מעודכנת. יצירת אצווה ועדכון סטטוס חסומים עד שהחיבור יחזור.
         </p>
       )}
+
+      {actionError && <p className="error-text">{actionError}</p>}
 
       <div className="dashboard-toolbar">
         <input
@@ -197,8 +210,16 @@ export function TabletDashboard() {
               batch={batch}
               busy={busyBatchId === batch.id}
               disabled={!online}
-              onMarkUsed={() => updateStatus(batch.id, "used")}
-              onMarkExpired={() => updateStatus(batch.id, "expired")}
+              onMarkUsed={() =>
+                updateStatus(batch.id, "used")
+                  .then(() => flashToast(STATUS_TOAST_LABEL.used))
+                  .catch(() => setActionError("עדכון הסטטוס נכשל — נסה/י שוב"))
+              }
+              onMarkExpired={() =>
+                updateStatus(batch.id, "expired")
+                  .then(() => flashToast(STATUS_TOAST_LABEL.expired))
+                  .catch(() => setActionError("עדכון הסטטוס נכשל — נסה/י שוב"))
+              }
               onMarkDiscarded={() => setDiscardTarget(batch)}
             />
           ))}
@@ -209,7 +230,10 @@ export function TabletDashboard() {
         <CreateBatchDialog
           products={products}
           onClose={() => setShowCreateDialog(false)}
-          onCreated={() => setShowCreateDialog(false)}
+          onCreated={() => {
+            setShowCreateDialog(false);
+            flashToast("האצווה נוצרה בהצלחה");
+          }}
         />
       )}
 
@@ -223,6 +247,7 @@ export function TabletDashboard() {
               quantity,
             });
             setDiscardTarget(null);
+            flashToast(STATUS_TOAST_LABEL.discarded);
           }}
         />
       )}

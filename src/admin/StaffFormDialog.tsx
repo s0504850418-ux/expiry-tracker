@@ -3,6 +3,7 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
 import type { Staff } from "./TeamManagement";
+import { Spinner } from "../components/Spinner";
 
 interface Props {
   staff: Staff | null; // null = עובד/ת חדש/ה
@@ -90,7 +91,7 @@ export function StaffFormDialog({ staff, newStaffId, onClose, onSaved }: Props) 
 
         <div className="dialog-actions">
           <button type="submit" disabled={busy}>
-            שמירה
+            {busy && <Spinner />} שמירה
           </button>
           <button type="button" onClick={onClose}>
             ביטול

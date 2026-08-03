@@ -3,14 +3,17 @@ import { useAuth } from "./auth/useAuth";
 import { LoginScreen } from "./screens/LoginScreen";
 import { TabletDashboard } from "./screens/TabletDashboard";
 import { AdminApp } from "./admin/AdminApp";
+import { Spinner } from "./components/Spinner";
 
 function AppContent() {
   const { claims, loading } = useAuth();
 
   if (loading) {
     return (
-      <main dir="rtl" style={{ padding: "2rem" }}>
-        <p>טוען...</p>
+      <main dir="rtl" className="login-screen">
+        <p>
+          <Spinner /> טוען...
+        </p>
       </main>
     );
   }

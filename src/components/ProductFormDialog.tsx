@@ -4,6 +4,7 @@ import { functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
 import type { PartialUsageUpdateFrequency, Product } from "../lib/types";
 import { useOnlineStatus } from "../lib/useOnlineStatus";
+import { Spinner } from "./Spinner";
 
 interface Props {
   product: Product | null; // null = יצירה חדשה
@@ -162,7 +163,7 @@ export function ProductFormDialog({ product, onClose, onSaved }: Props) {
 
         <div className="dialog-actions">
           <button type="submit" disabled={busy || !online}>
-            שמירה
+            {busy && <Spinner />} שמירה
           </button>
           <button type="button" onClick={onClose}>
             ביטול

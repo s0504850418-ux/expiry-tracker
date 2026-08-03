@@ -2,14 +2,17 @@ import { AuthProvider } from "../auth/AuthContext";
 import { useAuth } from "../auth/useAuth";
 import { AdminLoginScreen } from "./AdminLoginScreen";
 import { AdminDashboard } from "./AdminDashboard";
+import { Spinner } from "../components/Spinner";
 
 function AdminAppContent() {
   const { claims, loading, signOut } = useAuth();
 
   if (loading) {
     return (
-      <main dir="rtl" style={{ padding: "2rem" }}>
-        <p>טוען...</p>
+      <main dir="rtl" className="login-screen">
+        <p>
+          <Spinner /> טוען...
+        </p>
       </main>
     );
   }
@@ -24,7 +27,7 @@ function AdminAppContent() {
   // כספיים למי שאינו owner.
   if (claims.role !== "owner") {
     return (
-      <main dir="rtl" style={{ padding: "2rem" }}>
+      <main dir="rtl" className="login-screen">
         <p className="error-text">מסך הניהול מיועד לבעל/ת העסק בלבד.</p>
         <button type="button" onClick={() => signOut()}>
           יציאה

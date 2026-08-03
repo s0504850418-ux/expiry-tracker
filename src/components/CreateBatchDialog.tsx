@@ -6,6 +6,7 @@ import type { Product } from "../lib/types";
 import { printBatchLabel } from "../printing/printBatchLabel";
 import type { PrintableBatch } from "../printing/printBatchLabel";
 import { useOnlineStatus } from "../lib/useOnlineStatus";
+import { Spinner } from "./Spinner";
 
 interface Props {
   products: Product[];
@@ -99,7 +100,9 @@ export function CreateBatchDialog({ products, onClose, onCreated }: Props) {
     return (
       <div className="dialog-backdrop" dir="rtl">
         <div className="dialog">
-          <p>מדפיסה מדבקה...</p>
+          <p>
+            <Spinner /> מדפיסה מדבקה...
+          </p>
         </div>
       </div>
     );
@@ -168,7 +171,7 @@ export function CreateBatchDialog({ products, onClose, onCreated }: Props) {
 
         <div className="dialog-actions">
           <button type="submit" disabled={busy || !online || products.length === 0}>
-            יצירה
+            {busy && <Spinner />} יצירה
           </button>
           <button type="button" onClick={onClose}>
             ביטול

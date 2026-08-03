@@ -4,6 +4,7 @@ import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
 import { StaffFormDialog } from "./StaffFormDialog";
+import { Spinner } from "../components/Spinner";
 
 export interface Staff {
   id: string;
@@ -85,6 +86,7 @@ export function TeamManagement() {
                   onClick={() => toggleActive(member)}
                   disabled={busyStaffId === member.id}
                 >
+                  {busyStaffId === member.id && <Spinner />}{" "}
                   {member.active ? "השבתה" : "הפעלה"}
                 </button>
               </div>

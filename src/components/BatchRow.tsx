@@ -2,6 +2,14 @@ import { useState } from "react";
 import { urgencyLevel, formatTimeRemaining } from "../lib/expiry";
 import { printBatchLabel } from "../printing/printBatchLabel";
 import type { Batch } from "../lib/types";
+import { Spinner } from "./Spinner";
+
+const URGENCY_BADGE_LABEL: Record<ReturnType<typeof urgencyLevel>, string> = {
+  expired: "פג תוקף",
+  urgent: "דחוף",
+  soon: "בקרוב",
+  ok: "תקין",
+};
 
 interface Props {
   batch: Batch;
@@ -35,10 +43,11 @@ export function BatchRow({
   return (
     <li className={`batch-row urgency-${urgency}`}>
       <div className="batch-info">
+        <span className="urgency-badge">{URGENCY_BADGE_LABEL[urgency]}</span>
         <strong>{batch.productNameSnapshot}</strong>
         <span>{formatTimeRemaining(batch.expiresAt)}</span>
         {batch.printStatus === "failed" && !printing && (
-          <span className="error-text">⚠️ ההדפסה נכשלה</span>
+          <span className="error-text">ההדפסה נכשלה</span>
         )}
       </div>
       <div className="batch-actions">
@@ -48,6 +57,7 @@ export function BatchRow({
           disabled={printing || disabled}
           className={batch.printStatus === "failed" ? "urgent-action" : undefined}
         >
+          {printing && <Spinner />}{" "}
           {printing
             ? "מדפיסה..."
             : batch.printStatus === "failed"
@@ -55,10 +65,10 @@ export function BatchRow({
               : "הדפסה חוזרת"}
         </button>
         <button type="button" onClick={onMarkUsed} disabled={busy || disabled}>
-          נוצל
+          {busy && <Spinner />} נוצל
         </button>
         <button type="button" onClick={onMarkExpired} disabled={busy || disabled}>
-          פג תוקף
+          {busy && <Spinner />} פג תוקף
         </button>
         <button type="button" onClick={onMarkDiscarded} disabled={busy || disabled}>
           הושלך

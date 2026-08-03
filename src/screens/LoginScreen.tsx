@@ -4,6 +4,7 @@ import { signInWithCustomToken } from "firebase/auth";
 import { auth, functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
 import { useOnlineStatus } from "../lib/useOnlineStatus";
+import { Spinner } from "../components/Spinner";
 
 type Mode = "chooseRole" | "ownerCode" | "staffPicker" | "staffPin";
 
@@ -113,7 +114,7 @@ export function LoginScreen() {
             בעל/ת העסק
           </button>
           <button type="button" onClick={openStaffPicker} disabled={busy || !online}>
-            מנהל/ת משמרת
+            {busy && <Spinner />} מנהל/ת משמרת
           </button>
         </div>
       )}
@@ -130,7 +131,7 @@ export function LoginScreen() {
             autoFocus
           />
           <button type="submit" disabled={busy || !online || code.length === 0}>
-            כניסה
+            {busy && <Spinner />} כניסה
           </button>
           <button type="button" onClick={() => setMode("chooseRole")}>
             חזרה
@@ -173,7 +174,7 @@ export function LoginScreen() {
             autoFocus
           />
           <button type="submit" disabled={busy || !online || pin.length === 0}>
-            כניסה
+            {busy && <Spinner />} כניסה
           </button>
           <button type="button" onClick={() => setMode("staffPicker")}>
             חזרה

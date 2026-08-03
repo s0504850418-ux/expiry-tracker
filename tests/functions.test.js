@@ -706,6 +706,69 @@ test("processBusiness (checkExpiringBatches) יוצרת/משדרגת התראו�
   assert.equal(allNotifsSnap.size, 1); // בלי כפילות
 });
 
+test("processBusiness: מכבד notifyBeforeExpiryMinutes per-product, לא ערך גלובלי קבוע", async () => {
+  const createProduct = httpsCallable(functions, "createProduct");
+  const createBatch = httpsCallable(functions, "createBatch");
+  const now = new Date();
+
+  // מוצר עם חלון התראה מותאם אישית — הרבה יותר גדול מברירת המחדל
+  // הגלובלית (120 דקות): 5 שעות (300 דקות).
+  const { data: customProduct } = await callAsOwner(() =>
+    createProduct({
+      businessId: BUSINESS_ID,
+      name: `מוצר חלון-התראה-מותאם ${Date.now()}`,
+      unit: "kg",
+      shelfLifeMinutes: PRODUCT_SHELF_LIFE_MINUTES,
+      notifyBeforeExpiryMinutes: 300,
+    }),
+  );
+
+  // שתי אצוות עם אותו זמן-עד-תפוגה בדיוק (200 דקות מעכשיו) — בין שני
+  // הסיפים: מעל ברירת המחדל הגלובלית (120), אבל מתחת לחלון המותאם
+  // של המוצר החדש (300). אם הקוד עדיין קורא ערך גלובלי קבוע, שתי
+  // האצוות ייצאו זהות (או שתיהן עם התראה, או שתיהן בלי) — הבדיקה
+  // מוודאת שהתוצאה שונה בין שני המוצרים.
+  const preparedAt = new Date(now.getTime() - (PRODUCT_SHELF_LIFE_MINUTES - 200) * 60_000);
+
+  const { data: defaultWindowBatch } = await callAsStaff(() =>
+    createBatch({
+      businessId: BUSINESS_ID,
+      productId: PRODUCT_ID, // notifyBeforeExpiryMinutes: null -> ברירת מחדל גלובלית (120)
+      quantity: 1,
+      preparedAtClient: preparedAt.toISOString(),
+    }),
+  );
+  const { data: customWindowBatch } = await callAsStaff(() =>
+    createBatch({
+      businessId: BUSINESS_ID,
+      productId: customProduct.productId, // notifyBeforeExpiryMinutes: 300
+      quantity: 1,
+      preparedAtClient: preparedAt.toISOString(),
+    }),
+  );
+
+  await processBusiness(adminFirestore, BUSINESS_ID, now);
+
+  const defaultWindowNotifSnap = await adminFirestore
+    .doc(`businesses/${BUSINESS_ID}/notifications/${defaultWindowBatch.batchId}`)
+    .get();
+  assert.equal(
+    defaultWindowNotifSnap.exists,
+    false,
+    "אצווה של מוצר עם ברירת מחדל (120 דק') לא אמורה לקבל התראה כשנותרו 200 דקות לתפוגה",
+  );
+
+  const customWindowNotifSnap = await adminFirestore
+    .doc(`businesses/${BUSINESS_ID}/notifications/${customWindowBatch.batchId}`)
+    .get();
+  assert.equal(
+    customWindowNotifSnap.exists,
+    true,
+    "אצווה של מוצר עם חלון מותאם (300 דק') כן אמורה לקבל התראה כשנותרו 200 דקות לתפוגה",
+  );
+  assert.equal(customWindowNotifSnap.data().type, "batchExpiringSoon");
+});
+
 test("updateBatchPrintStatus: מעדכן printed/failed לאצווה פעילה, ונדחה לאצווה שאינה פעילה", async () => {
   const createBatch = httpsCallable(functions, "createBatch");
   const updateBatchStatus = httpsCallable(functions, "updateBatchStatus");

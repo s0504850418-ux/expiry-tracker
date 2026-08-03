@@ -124,19 +124,22 @@ src/
   App.tsx                  routing: / (טאבלט) מול /admin (ניהול), בלי ספריית ניתוב
   firebase/config.ts        אתחול Firebase + Firestore persistentLocalCache (עבודה אופליין)
   auth/                      AuthContext/useAuth — משותף לטאבלט ולמסך הניהול
-  screens/                   LoginScreen, TabletDashboard, ManagementScreen
+  screens/                   LoginScreen, TabletDashboard
   admin/                     AdminApp, AdminLoginScreen (Google), AdminDashboard, WasteReport,
-                              AuditLogViewer, ManageAdminAccess, exportWasteReportPdf
-  components/                CreateBatchDialog, BatchRow, DiscardReasonDialog,
+                              AuditLogViewer, ManageAdminAccess, TeamManagement, StaffFormDialog,
+                              ProductsManagement (מוצרים/מרכיבים/מתכונים, עבר לכאן מהטאבלט),
+                              exportWasteReportPdf
+  components/                CreateBatchDialog, BatchRow, DiscardReasonDialog, NotificationsPanel,
                               ProductFormDialog, IngredientFormDialog, RecipeEditorDialog
   printing/                   PrinterAdapter, BrowserPrintAdapter (עובד היום),
                               WebBluetoothPrinterAdapter (שלד, ממתין לדגם מדפסת)
   scanning/                   QrScannerDialog (jsQR + מצלמה)
-  lib/                        types, expiry, businessId, qr, useOnlineStatus
+  lib/                        types, expiry, businessId, discardReasons, qr, useOnlineStatus
 
 functions/                 Cloud Functions, TypeScript נפרד עם package.json משלו
   src/lib/                   pin.ts (hash/verify/lockout), claims.ts, authz.ts, verifySecret.ts,
-                              audit.ts, batchTiming.ts, recipeCost.ts
+                              audit.ts, batchTiming.ts, recipeCost.ts, discardReasons.ts,
+                              notificationTiming.ts
   src/auth/                  verifyOwnerCode, verifyStaffPin, setOwnerCode, setStaffPin,
                               claimOwnerAccessViaGoogle, addAuthorizedOwnerEmail
   src/staff/                 listActiveStaffNames
@@ -144,6 +147,8 @@ functions/                 Cloud Functions, TypeScript נפרד עם package.jso
   src/products/               createProduct, updateProduct
   src/ingredients/            createIngredient, updateIngredientPrice
   src/recipes/                 createRecipeVersion
+  src/notifications/           checkExpiringBatches (Scheduled Function, כל שעה)
+  src/testSupport.ts          חשיפת עזרי בדיקה (Firestore instance) לבדיקות אינטגרציה בלבד
   scripts/                    bootstrapBusiness.ts, seedSampleProducts.ts (סקריפטי אדמין, לא Cloud Functions)
   test/                       בדיקות יחידה (vitest)
 

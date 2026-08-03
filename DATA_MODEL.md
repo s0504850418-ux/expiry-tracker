@@ -34,6 +34,8 @@ settings: {
 ```
 כתיבה: רק Admin SDK. קריאה: owner/shiftManager של אותו עסק בלבד.
 
+**פער שנמצא בסקירה עצמית (2026-08-03, ראו CLAUDE.md שלב 11):** `settings.defaultPartialUsageUpdateFrequency` נכתב ב-`bootstrapBusiness.ts` אבל אף Cloud Function לא קורא אותו בפועל כברירת מחדל — ומעבר לזה, גם הערך `'endOfDay'` עצמו (בין ברמת המוצר ובין ברמת העסק) לא מחובר לשום מנגנון עדכון-כמות-על-אצווה-פעילה שקיים בפועל. ראו הפירוט המלא ב-CLAUDE.md.
+
 ### תת-אוסף `businesses/{businessId}/secrets/owner`
 
 ```
@@ -165,7 +167,7 @@ lastRemindedAt: Timestamp
 acknowledgedAt: Timestamp | null
 acknowledgedByStaffId: string | null
 ```
-בתוך המכשיר בלבד (לא וואטסאפ/SMS), תזכורת חוזרת אם לא טופלה — הלוגיקה בפועל (Scheduled Function שבודקת אצוות קרובות לתפוגה) תיבנה בשלב מאוחר יותר; כרגע רק המבנה קיים.
+בתוך המכשיר בלבד (לא וואטסאפ/SMS), תזכורת חוזרת אם לא טופלה. **עודכן (שלב 9, 2026-08-03): נבנה בפועל.** `checkExpiringBatches` (Scheduled Function, כל שעה) בודקת אצוות `active` ויוצרת/משדרגת התראה לפי `notifyBeforeExpiryMinutes` הספציפי של המוצר (או ברירת מחדל גלובלית — `EXPIRING_SOON_WINDOW_MINUTES`, ראו `functions/src/lib/notificationTiming.ts`). `NotificationsPanel` בטאבלט מציג התראות `pending`; "טיפול" = שינוי סטטוס האצווה בפועל (`updateBatchStatus` מסמנת `acknowledged` אוטומטית). **פער נפרד עדיין פתוח**: ה-Scheduled Function מעולם לא נבדקה דרך Cloud Scheduler האמיתי (לא כאן, לא בייצור) — ראו CLAUDE.md, "מה עדיין חסר".
 
 ## מה עוד לא נבנה בשלב 2 (בכוונה)
 
