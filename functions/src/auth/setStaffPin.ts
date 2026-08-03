@@ -8,7 +8,7 @@ interface Data {
   businessId: string;
   staffId: string;
   name: string;
-  pin: string;
+  pin?: string;
   active: boolean;
 }
 
@@ -22,13 +22,12 @@ function validate(data: unknown): Data {
     d.staffId.length === 0 ||
     typeof d.name !== "string" ||
     d.name.trim().length === 0 ||
-    typeof d.pin !== "string" ||
-    d.pin.length < 4 ||
-    typeof d.active !== "boolean"
+    typeof d.active !== "boolean" ||
+    (d.pin !== undefined && (typeof d.pin !== "string" || d.pin.length < 4))
   ) {
     throw new HttpsError(
       "invalid-argument",
-      "businessId, staffId, name, pin (לפחות 4 תווים) ו-active נדרשים",
+      "businessId, staffId, name ו-active נדרשים; pin, כשמסופק, חייב להיות לפחות 4 תווים",
     );
   }
   return {
@@ -41,9 +40,11 @@ function validate(data: unknown): Data {
 }
 
 /**
- * יוצר/ת עובד/ת משמרת חדש/ה או מעדכנ/ת PIN + סטטוס פעילות לעובד/ת
- * קיימ/ת. owner-only. הוספת/הסרת יכולות (למשל שינוי מחיר/מוצר) לא
- * ניתנת למנהל/ת משמרת במובנה הזה — ה-role נקבע פעם אחת ב-custom claims.
+ * יוצר/ת עובד/ת משמרת חדש/ה או מעדכנ/ת עובד/ת קיימ/ת. owner-only.
+ * pin נדרש רק ביצירת עובד/ת חדש/ה — עדכון שם/סטטוס פעילות בלבד
+ * (למשל השבתת מנהל/ת משמרת שעזב/ה) לא דורש להזין PIN חדש. הוספת/
+ * הסרת יכולות (למשל שינוי מחיר/מוצר) לא ניתנת למנהל/ת משמרת במובנה
+ * הזה — ה-role נקבע פעם אחת ב-custom claims.
  */
 export const setStaffPin = onCall(async (request) => {
   const { businessId, staffId, name, pin, active } = validate(request.data);
@@ -53,6 +54,10 @@ export const setStaffPin = onCall(async (request) => {
   const staffRef = db.doc(`businesses/${businessId}/staff/${staffId}`);
   const secretRef = db.doc(`businesses/${businessId}/staffSecrets/${staffId}`);
   const existing = await staffRef.get();
+
+  if (!existing.exists && pin === undefined) {
+    throw new HttpsError("invalid-argument", "יש להזין PIN ליצירת עובד/ת חדש/ה");
+  }
 
   await staffRef.set(
     {
@@ -68,13 +73,15 @@ export const setStaffPin = onCall(async (request) => {
     { merge: true },
   );
 
-  const hash = await hashSecret(pin);
-  await secretRef.set({
-    hash,
-    failedAttempts: 0,
-    lockedUntil: null,
-    updatedAt: FieldValue.serverTimestamp(),
-  });
+  if (pin !== undefined) {
+    const hash = await hashSecret(pin);
+    await secretRef.set({
+      hash,
+      failedAttempts: 0,
+      lockedUntil: null,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
 
   await writeAuditLog({
     businessId,

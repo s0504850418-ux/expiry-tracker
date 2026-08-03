@@ -9,6 +9,7 @@ interface Data {
   name?: string;
   shelfLifeMinutes?: number;
   partialUsageUpdateFrequency?: "endOfBatchLife" | "endOfDay" | null;
+  notifyBeforeExpiryMinutes?: number | null;
   active?: boolean;
 }
 
@@ -35,12 +36,23 @@ function validate(data: unknown): Data {
   if (d.active !== undefined && typeof d.active !== "boolean") {
     throw new HttpsError("invalid-argument", "active לא תקין");
   }
+  if (
+    d.notifyBeforeExpiryMinutes !== undefined &&
+    d.notifyBeforeExpiryMinutes !== null &&
+    !(typeof d.notifyBeforeExpiryMinutes === "number" && d.notifyBeforeExpiryMinutes > 0)
+  ) {
+    throw new HttpsError(
+      "invalid-argument",
+      "notifyBeforeExpiryMinutes חייב להיות מספר חיובי או null",
+    );
+  }
   return {
     businessId: d.businessId,
     productId: d.productId,
     name: d.name?.trim(),
     shelfLifeMinutes: d.shelfLifeMinutes,
     partialUsageUpdateFrequency: d.partialUsageUpdateFrequency,
+    notifyBeforeExpiryMinutes: d.notifyBeforeExpiryMinutes,
     active: d.active,
   };
 }
@@ -80,6 +92,9 @@ export const updateProduct = onCall(async (request) => {
   }
   if (data.partialUsageUpdateFrequency !== undefined) {
     update.partialUsageUpdateFrequency = data.partialUsageUpdateFrequency;
+  }
+  if (data.notifyBeforeExpiryMinutes !== undefined) {
+    update.notifyBeforeExpiryMinutes = data.notifyBeforeExpiryMinutes;
   }
   if (data.active !== undefined) {
     update.active = data.active;
