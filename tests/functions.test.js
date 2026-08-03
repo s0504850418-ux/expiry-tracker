@@ -320,7 +320,7 @@ test("updateBatchStatus: שתי קריאות בו-זמנית על אותה אצ�
         businessId: BUSINESS_ID,
         batchId: created.batchId,
         newStatus: "discarded",
-        discardReason: "מרוץ בין שני מכשירים",
+        discardReason: "אחר",
         quantity: 0,
       }),
     ]),
