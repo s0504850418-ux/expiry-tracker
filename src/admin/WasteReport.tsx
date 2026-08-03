@@ -12,6 +12,7 @@ interface ReportBatch {
   productNameSnapshot: string;
   unit: string;
   quantity: number;
+  preparedQuantity: number;
   status: BatchStatus;
   discardReason: string | null;
   recipeVersionId: string | null;
@@ -100,6 +101,9 @@ export function WasteReport() {
           productNameSnapshot: data.productNameSnapshot,
           unit: data.unit,
           quantity: data.quantity,
+          // fallback ל-quantity עצמו עבור אצוות ישנות שנוצרו לפני הוספת
+          // השדה (יחס 1 = כל העלות מיוחסת לפחת, כמו ההתנהגות הקודמת).
+          preparedQuantity: (data.preparedQuantity as number | undefined) ?? data.quantity,
           status: data.status,
           discardReason: data.discardReason ?? null,
           recipeVersionId,
@@ -200,15 +204,21 @@ function summarize(batches: ReportBatch[]) {
     }
     totalCost += b.costSnapshot;
     if (b.status === "discarded" || b.status === "expired") {
-      wasteCost += b.costSnapshot;
+      // costSnapshot הוא עלות ההכנה המלאה של המתכון, לא תלוי בכמות —
+      // יש לייחס לפחת רק את החלק היחסי שבאמת הושלך/פג מתוך מה שהוכן,
+      // לא את מלוא עלות האצווה (למשל שימוש חלקי: 7 מתוך 10 ק"ג נוצלו
+      // כרגיל, רק 3 ק"ג הושלכו — לפחת מיוחסים 30% מהעלות, לא 100%).
+      const wasteRatio = b.preparedQuantity > 0 ? b.quantity / b.preparedQuantity : 1;
+      const batchWasteCost = b.costSnapshot * wasteRatio;
+      wasteCost += batchWasteCost;
       const existing = byProductMap.get(b.productNameSnapshot);
       if (existing) {
-        existing.wasteCost += b.costSnapshot;
+        existing.wasteCost += batchWasteCost;
         existing.wasteBatchCount += 1;
       } else {
         byProductMap.set(b.productNameSnapshot, {
           productName: b.productNameSnapshot,
-          wasteCost: b.costSnapshot,
+          wasteCost: batchWasteCost,
           wasteBatchCount: 1,
         });
       }

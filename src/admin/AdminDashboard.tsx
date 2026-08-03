@@ -3,8 +3,9 @@ import { useAuth } from "../auth/useAuth";
 import { AuditLogViewer } from "./AuditLogViewer";
 import { WasteReport } from "./WasteReport";
 import { ManageAdminAccess } from "./ManageAdminAccess";
+import { TeamManagement } from "./TeamManagement";
 
-type Tab = "report" | "auditLog" | "access";
+type Tab = "report" | "auditLog" | "access" | "team";
 
 export function AdminDashboard() {
   const { signOut } = useAuth();
@@ -29,11 +30,15 @@ export function AdminDashboard() {
         <button type="button" onClick={() => setTab("access")}>
           ניהול גישה
         </button>
+        <button type="button" onClick={() => setTab("team")}>
+          ניהול צוות
+        </button>
       </div>
 
       {tab === "report" && <WasteReport />}
       {tab === "auditLog" && <AuditLogViewer />}
       {tab === "access" && <ManageAdminAccess />}
+      {tab === "team" && <TeamManagement />}
     </main>
   );
 }

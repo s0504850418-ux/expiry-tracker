@@ -249,6 +249,71 @@ test("setStaffPin: owner יכול ליצור עובד/ת חדש/ה, וה-PIN ה�
   assert.ok(data.token);
 });
 
+test("setStaffPin: יצירה חדשה דורשת PIN; עדכון שם/סטטוס בלי PIN לא נוגע ב-PIN הקיים; השבתה חוסמת כניסה", async () => {
+  const setStaffPin = httpsCallable(functions, "setStaffPin");
+  const verifyStaffPin = httpsCallable(functions, "verifyStaffPin");
+
+  // יצירת עובד/ת חדש/ה בלי PIN נדחית.
+  await assert.rejects(
+    () =>
+      callAsOwner(() =>
+        setStaffPin({
+          businessId: BUSINESS_ID,
+          staffId: "staff3",
+          name: "מיכל",
+          active: true,
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/invalid-argument");
+      return true;
+    },
+  );
+
+  await callAsOwner(() =>
+    setStaffPin({
+      businessId: BUSINESS_ID,
+      staffId: "staff3",
+      name: "מיכל",
+      pin: "2222",
+      active: true,
+    }),
+  );
+
+  // עדכון שם בלבד, בלי PIN — ה-PIN הקיים ממשיך לעבוד.
+  await callAsOwner(() =>
+    setStaffPin({
+      businessId: BUSINESS_ID,
+      staffId: "staff3",
+      name: "מיכל כהן",
+      active: true,
+    }),
+  );
+  const { data: stillWorks } = await verifyStaffPin({
+    businessId: BUSINESS_ID,
+    staffId: "staff3",
+    pin: "2222",
+  });
+  assert.ok(stillWorks.token);
+
+  // השבתה (active: false, בלי PIN) — כניסה נחסמת גם עם ה-PIN הנכון.
+  await callAsOwner(() =>
+    setStaffPin({
+      businessId: BUSINESS_ID,
+      staffId: "staff3",
+      name: "מיכל כהן",
+      active: false,
+    }),
+  );
+  await assert.rejects(
+    () => verifyStaffPin({ businessId: BUSINESS_ID, staffId: "staff3", pin: "2222" }),
+    (err) => {
+      assert.equal(err.code, "functions/not-found");
+      return true;
+    },
+  );
+});
+
 test("addAuthorizedOwnerEmail + claimOwnerAccessViaGoogle: מייל מורשה מקבל role=owner, מייל לא מורשה נדחה", async () => {
   const addAuthorizedOwnerEmail = httpsCallable(functions, "addAuthorizedOwnerEmail");
   const claimOwnerAccessViaGoogle = httpsCallable(functions, "claimOwnerAccessViaGoogle");
@@ -457,6 +522,67 @@ test("updateBatchStatus: מעבר ל-discarded דורש סיבה, ואי אפש�
       return true;
     },
   );
+});
+
+test("preparedQuantity: נשמר קבוע ביצירה, ומגן מפני דיווח כמות פחת גדולה ממה שהוכן בפועל", async () => {
+  const createBatch = httpsCallable(functions, "createBatch");
+  const updateBatchStatus = httpsCallable(functions, "updateBatchStatus");
+
+  const { data: created } = await callAsStaff(() =>
+    createBatch({
+      businessId: BUSINESS_ID,
+      productId: PRODUCT_ID,
+      quantity: 10,
+      preparedAtClient: new Date().toISOString(),
+    }),
+  );
+
+  await rulesTestEnv.withSecurityRulesDisabled(async (ctx) => {
+    const snap = await ctx
+      .firestore()
+      .doc(`businesses/${BUSINESS_ID}/batches/${created.batchId}`)
+      .get();
+    assert.equal(snap.data().preparedQuantity, 10);
+    assert.equal(snap.data().quantity, 10);
+  });
+
+  // אי אפשר לדווח שהושלכו יותר מ-10 ק"ג ממה שהוכן במקור.
+  await assert.rejects(
+    () =>
+      callAsStaff(() =>
+        updateBatchStatus({
+          businessId: BUSINESS_ID,
+          batchId: created.batchId,
+          newStatus: "discarded",
+          discardReason: "בעיית איכות",
+          quantity: 15,
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/invalid-argument");
+      return true;
+    },
+  );
+
+  // דיווח חלקי תקין (3 מתוך 10) מתקבל, ו-preparedQuantity נשאר קבוע.
+  await callAsStaff(() =>
+    updateBatchStatus({
+      businessId: BUSINESS_ID,
+      batchId: created.batchId,
+      newStatus: "discarded",
+      discardReason: "בעיית איכות",
+      quantity: 3,
+    }),
+  );
+
+  await rulesTestEnv.withSecurityRulesDisabled(async (ctx) => {
+    const snap = await ctx
+      .firestore()
+      .doc(`businesses/${BUSINESS_ID}/batches/${created.batchId}`)
+      .get();
+    assert.equal(snap.data().preparedQuantity, 10);
+    assert.equal(snap.data().quantity, 3);
+  });
 });
 
 test("updateBatchPrintStatus: מעדכן printed/failed לאצווה פעילה, ונדחה לאצווה שאינה פעילה", async () => {

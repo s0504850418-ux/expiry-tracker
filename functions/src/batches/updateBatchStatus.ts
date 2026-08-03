@@ -83,6 +83,16 @@ export const updateBatchStatus = onCall(async (request) => {
         `לא ניתן לשנות סטטוס מ-"${batch.status}" — רק אצווה פעילה ניתנת לעדכון`,
       );
     }
+    if (
+      data.quantity !== undefined &&
+      typeof batch.preparedQuantity === "number" &&
+      data.quantity > batch.preparedQuantity
+    ) {
+      throw new HttpsError(
+        "invalid-argument",
+        "הכמות לא יכולה להיות גדולה מהכמות שהוכנה במקור",
+      );
+    }
 
     const update: Record<string, unknown> = {
       status: data.newStatus,

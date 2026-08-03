@@ -124,7 +124,8 @@ productId: string
 productNameSnapshot: string
 unit: string                      // snapshot מהמוצר
 recipeVersionId: string | null
-quantity: number
+quantity: number                  // כמות נוכחית/שנותרה; מתעדכנת ב-updateBatchStatus (למשל לכמות שבאמת הושלכה)
+preparedQuantity: number          // הכמות שהוכנה בפועל ביצירה — קבועה לעולם, לא מתעדכנת. משמשת לחישוב עלות פחת יחסית בדוח (quantity/preparedQuantity), כי costSnapshot של המתכון הוא עלות ההכנה המלאה
 preparedAtClient: Timestamp       // מה שהעובד הזין במכשיר
 preparedAtServer: Timestamp       // זמן קבלה בשרת — לזיהוי חריגות/ניתוק
 expiresAt: Timestamp              // מחושב מ-preparedAtClient + shelfLifeMinutes (לא מ-preparedAtServer, כדי שניתוק זמני לא יעוות את התאריך האמיתי)
