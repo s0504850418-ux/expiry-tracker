@@ -36,9 +36,6 @@ export function BatchRow({
     <li className={`batch-row urgency-${urgency}`}>
       <div className="batch-info">
         <strong>{batch.productNameSnapshot}</strong>
-        <span>
-          {batch.quantity} {batch.unit}
-        </span>
         <span>{formatTimeRemaining(batch.expiresAt)}</span>
         {batch.printStatus === "failed" && !printing && (
           <span className="error-text">⚠️ ההדפסה נכשלה</span>

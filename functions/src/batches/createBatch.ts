@@ -104,6 +104,10 @@ export const createBatch = onCall(async (request) => {
       unit: product.unit,
       recipeVersionId: product.currentRecipeVersionId ?? null,
       quantity,
+      // preparedQuantity לעולם לא משתנה אחרי היצירה (בניגוד ל-quantity,
+      // שמתעדכן ב-updateBatchStatus לכמות שבאמת הושלכה/נותרה) — כדי
+      // שדוח הפחת יוכל לחשב עלות יחסית לחלק שבאמת בוזבז מתוך מה שהוכן.
+      preparedQuantity: quantity,
       preparedAtClient: Timestamp.fromDate(preparedAtClientDate),
       preparedAtServer: FieldValue.serverTimestamp(),
       expiresAt: Timestamp.fromDate(expiresAt),

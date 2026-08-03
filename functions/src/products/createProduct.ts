@@ -12,6 +12,7 @@ interface Data {
   unit: Unit;
   shelfLifeMinutes: number;
   partialUsageUpdateFrequency?: "endOfBatchLife" | "endOfDay" | null;
+  notifyBeforeExpiryMinutes?: number | null;
 }
 
 function validate(data: unknown): Data {
@@ -40,12 +41,23 @@ function validate(data: unknown): Data {
   ) {
     throw new HttpsError("invalid-argument", "partialUsageUpdateFrequency לא תקין");
   }
+  if (
+    d.notifyBeforeExpiryMinutes !== undefined &&
+    d.notifyBeforeExpiryMinutes !== null &&
+    !(typeof d.notifyBeforeExpiryMinutes === "number" && d.notifyBeforeExpiryMinutes > 0)
+  ) {
+    throw new HttpsError(
+      "invalid-argument",
+      "notifyBeforeExpiryMinutes חייב להיות מספר חיובי או null",
+    );
+  }
   return {
     businessId: d.businessId,
     name: d.name.trim(),
     unit: d.unit as Unit,
     shelfLifeMinutes: d.shelfLifeMinutes,
     partialUsageUpdateFrequency: d.partialUsageUpdateFrequency ?? null,
+    notifyBeforeExpiryMinutes: d.notifyBeforeExpiryMinutes ?? null,
   };
 }
 
@@ -75,6 +87,7 @@ export const createProduct = onCall(async (request) => {
     unit: data.unit,
     shelfLifeMinutes: data.shelfLifeMinutes,
     partialUsageUpdateFrequency: data.partialUsageUpdateFrequency,
+    notifyBeforeExpiryMinutes: data.notifyBeforeExpiryMinutes,
     currentRecipeVersionId: null,
     active: true,
     createdAt: FieldValue.serverTimestamp(),

@@ -261,6 +261,71 @@ test("setStaffPin: owner יכול ליצור עובד/ת חדש/ה, וה-PIN ה�
   assert.ok(data.token);
 });
 
+test("setStaffPin: יצירה חדשה דורשת PIN; עדכון שם/סטטוס בלי PIN לא נוגע ב-PIN הקיים; השבתה חוסמת כניסה", async () => {
+  const setStaffPin = httpsCallable(functions, "setStaffPin");
+  const verifyStaffPin = httpsCallable(functions, "verifyStaffPin");
+
+  // יצירת עובד/ת חדש/ה בלי PIN נדחית.
+  await assert.rejects(
+    () =>
+      callAsOwner(() =>
+        setStaffPin({
+          businessId: BUSINESS_ID,
+          staffId: "staff3",
+          name: "מיכל",
+          active: true,
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/invalid-argument");
+      return true;
+    },
+  );
+
+  await callAsOwner(() =>
+    setStaffPin({
+      businessId: BUSINESS_ID,
+      staffId: "staff3",
+      name: "מיכל",
+      pin: "2222",
+      active: true,
+    }),
+  );
+
+  // עדכון שם בלבד, בלי PIN — ה-PIN הקיים ממשיך לעבוד.
+  await callAsOwner(() =>
+    setStaffPin({
+      businessId: BUSINESS_ID,
+      staffId: "staff3",
+      name: "מיכל כהן",
+      active: true,
+    }),
+  );
+  const { data: stillWorks } = await verifyStaffPin({
+    businessId: BUSINESS_ID,
+    staffId: "staff3",
+    pin: "2222",
+  });
+  assert.ok(stillWorks.token);
+
+  // השבתה (active: false, בלי PIN) — כניסה נחסמת גם עם ה-PIN הנכון.
+  await callAsOwner(() =>
+    setStaffPin({
+      businessId: BUSINESS_ID,
+      staffId: "staff3",
+      name: "מיכל כהן",
+      active: false,
+    }),
+  );
+  await assert.rejects(
+    () => verifyStaffPin({ businessId: BUSINESS_ID, staffId: "staff3", pin: "2222" }),
+    (err) => {
+      assert.equal(err.code, "functions/not-found");
+      return true;
+    },
+  );
+});
+
 test("addAuthorizedOwnerEmail + claimOwnerAccessViaGoogle: מייל מורשה מקבל role=owner, מייל לא מורשה נדחה", async () => {
   const addAuthorizedOwnerEmail = httpsCallable(functions, "addAuthorizedOwnerEmail");
   const claimOwnerAccessViaGoogle = httpsCallable(functions, "claimOwnerAccessViaGoogle");
@@ -404,7 +469,7 @@ test("updateBatchStatus: שתי קריאות בו-זמנית על אותה אצ�
         businessId: BUSINESS_ID,
         batchId: created.batchId,
         newStatus: "discarded",
-        discardReason: "מרוץ בין שני מכשירים",
+        discardReason: "אחר",
         quantity: 0,
       }),
     ]),
@@ -450,7 +515,7 @@ test("updateBatchStatus: מעבר ל-discarded דורש סיבה, ואי אפש�
       businessId: BUSINESS_ID,
       batchId: created.batchId,
       newStatus: "discarded",
-      discardReason: "נשפך על הרצפה",
+      discardReason: "בעיית איכות",
       quantity: 0,
     }),
   );
@@ -469,6 +534,67 @@ test("updateBatchStatus: מעבר ל-discarded דורש סיבה, ואי אפש�
       return true;
     },
   );
+});
+
+test("preparedQuantity: נשמר קבוע ביצירה, ומגן מפני דיווח כמות פחת גדולה ממה שהוכן בפועל", async () => {
+  const createBatch = httpsCallable(functions, "createBatch");
+  const updateBatchStatus = httpsCallable(functions, "updateBatchStatus");
+
+  const { data: created } = await callAsStaff(() =>
+    createBatch({
+      businessId: BUSINESS_ID,
+      productId: PRODUCT_ID,
+      quantity: 10,
+      preparedAtClient: new Date().toISOString(),
+    }),
+  );
+
+  await rulesTestEnv.withSecurityRulesDisabled(async (ctx) => {
+    const snap = await ctx
+      .firestore()
+      .doc(`businesses/${BUSINESS_ID}/batches/${created.batchId}`)
+      .get();
+    assert.equal(snap.data().preparedQuantity, 10);
+    assert.equal(snap.data().quantity, 10);
+  });
+
+  // אי אפשר לדווח שהושלכו יותר מ-10 ק"ג ממה שהוכן במקור.
+  await assert.rejects(
+    () =>
+      callAsStaff(() =>
+        updateBatchStatus({
+          businessId: BUSINESS_ID,
+          batchId: created.batchId,
+          newStatus: "discarded",
+          discardReason: "בעיית איכות",
+          quantity: 15,
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/invalid-argument");
+      return true;
+    },
+  );
+
+  // דיווח חלקי תקין (3 מתוך 10) מתקבל, ו-preparedQuantity נשאר קבוע.
+  await callAsStaff(() =>
+    updateBatchStatus({
+      businessId: BUSINESS_ID,
+      batchId: created.batchId,
+      newStatus: "discarded",
+      discardReason: "בעיית איכות",
+      quantity: 3,
+    }),
+  );
+
+  await rulesTestEnv.withSecurityRulesDisabled(async (ctx) => {
+    const snap = await ctx
+      .firestore()
+      .doc(`businesses/${BUSINESS_ID}/batches/${created.batchId}`)
+      .get();
+    assert.equal(snap.data().preparedQuantity, 10);
+    assert.equal(snap.data().quantity, 3);
+  });
 });
 
 test("updateBatchStatus מסמנת התראה pending כ-acknowledged אוטומטית כשמטפלים באצווה", async () => {
@@ -744,6 +870,112 @@ test("updateProduct: owner יכול לעדכן שם/חיי מדף/סטטוס פ�
           businessId: BUSINESS_ID,
           productId: created.productId,
           active: true,
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/permission-denied");
+      return true;
+    },
+  );
+});
+
+test("notifyBeforeExpiryMinutes: ניתן להגדיר per-product ב-createProduct/updateProduct, ונדחה ערך לא תקין", async () => {
+  const createProduct = httpsCallable(functions, "createProduct");
+  const updateProduct = httpsCallable(functions, "updateProduct");
+
+  // ברירת מחדל: לא הוגדר -> null (המשמעות: להשתמש בברירת המחדל הגלובלית)
+  const { data: withoutOverride } = await callAsOwner(() =>
+    createProduct({
+      businessId: BUSINESS_ID,
+      name: "מוצר בלי override להתראה",
+      unit: "kg",
+      shelfLifeMinutes: 60,
+    }),
+  );
+  await rulesTestEnv.withSecurityRulesDisabled(async (ctx) => {
+    const snap = await ctx
+      .firestore()
+      .doc(`businesses/${BUSINESS_ID}/products/${withoutOverride.productId}`)
+      .get();
+    assert.equal(snap.data().notifyBeforeExpiryMinutes, null);
+  });
+
+  // override תקין ביצירה
+  const { data: created } = await callAsOwner(() =>
+    createProduct({
+      businessId: BUSINESS_ID,
+      name: "מוצר עם התראה מותאמת",
+      unit: "kg",
+      shelfLifeMinutes: 60 * 24 * 5,
+      notifyBeforeExpiryMinutes: 60 * 24 * 2, // יומיים לפני תפוגה
+    }),
+  );
+  await rulesTestEnv.withSecurityRulesDisabled(async (ctx) => {
+    const snap = await ctx
+      .firestore()
+      .doc(`businesses/${BUSINESS_ID}/products/${created.productId}`)
+      .get();
+    assert.equal(snap.data().notifyBeforeExpiryMinutes, 60 * 24 * 2);
+  });
+
+  // ערך לא תקין (שלילי) נדחה ביצירה
+  await assert.rejects(
+    () =>
+      callAsOwner(() =>
+        createProduct({
+          businessId: BUSINESS_ID,
+          name: "מוצר עם התראה לא תקינה",
+          unit: "kg",
+          shelfLifeMinutes: 60,
+          notifyBeforeExpiryMinutes: -10,
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/invalid-argument");
+      return true;
+    },
+  );
+
+  // עדכון owner-only לערך חדש
+  await callAsOwner(() =>
+    updateProduct({
+      businessId: BUSINESS_ID,
+      productId: created.productId,
+      notifyBeforeExpiryMinutes: 60 * 24, // יום אחד
+    }),
+  );
+  await rulesTestEnv.withSecurityRulesDisabled(async (ctx) => {
+    const snap = await ctx
+      .firestore()
+      .doc(`businesses/${BUSINESS_ID}/products/${created.productId}`)
+      .get();
+    assert.equal(snap.data().notifyBeforeExpiryMinutes, 60 * 24);
+  });
+
+  // ערך לא תקין נדחה גם בעדכון
+  await assert.rejects(
+    () =>
+      callAsOwner(() =>
+        updateProduct({
+          businessId: BUSINESS_ID,
+          productId: created.productId,
+          notifyBeforeExpiryMinutes: 0,
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/invalid-argument");
+      return true;
+    },
+  );
+
+  // shiftManager לא יכול לעדכן (owner-only, כמו חיי מדף ומחיר)
+  await assert.rejects(
+    () =>
+      callAsStaff(() =>
+        updateProduct({
+          businessId: BUSINESS_ID,
+          productId: created.productId,
+          notifyBeforeExpiryMinutes: 60,
         }),
       ),
     (err) => {
