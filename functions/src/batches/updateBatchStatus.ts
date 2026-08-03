@@ -2,6 +2,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { requireBusinessMember } from "../lib/authz";
 import { writeAuditLog } from "../lib/audit";
+import { DISCARD_REASONS } from "../lib/discardReasons";
 
 const TERMINAL_STATUSES = ["used", "expired", "discarded"] as const;
 type TerminalStatus = (typeof TERMINAL_STATUSES)[number];
@@ -33,10 +34,13 @@ function validate(data: unknown): Data {
   if (d.quantity !== undefined && !(typeof d.quantity === "number" && d.quantity >= 0)) {
     throw new HttpsError("invalid-argument", "quantity חייב להיות מספר לא-שלילי");
   }
-  if (d.newStatus === "discarded" && !d.discardReason?.trim()) {
+  if (
+    d.newStatus === "discarded" &&
+    !DISCARD_REASONS.includes(d.discardReason as (typeof DISCARD_REASONS)[number])
+  ) {
     throw new HttpsError(
       "invalid-argument",
-      "יש לציין סיבת פחת כשמסמנים אצווה כמושלכת",
+      "יש לבחור סיבת פחת מתוך הרשימה הסגורה כשמסמנים אצווה כמושלכת",
     );
   }
   return {
@@ -44,7 +48,7 @@ function validate(data: unknown): Data {
     batchId: d.batchId,
     newStatus: d.newStatus as TerminalStatus,
     quantity: d.quantity,
-    discardReason: d.discardReason?.trim(),
+    discardReason: d.discardReason,
   };
 }
 

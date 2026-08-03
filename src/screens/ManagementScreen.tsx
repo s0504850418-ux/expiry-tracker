@@ -39,6 +39,7 @@ export function ManagementScreen({ onClose }: Props) {
             active: d.data().active,
             currentRecipeVersionId: d.data().currentRecipeVersionId ?? null,
             partialUsageUpdateFrequency: d.data().partialUsageUpdateFrequency ?? null,
+            notifyBeforeExpiryMinutes: d.data().notifyBeforeExpiryMinutes ?? null,
           })),
         );
       },
