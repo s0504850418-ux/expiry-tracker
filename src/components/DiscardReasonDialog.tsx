@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Batch } from "../lib/types";
 import { useOnlineStatus } from "../lib/useOnlineStatus";
+import { DISCARD_REASONS } from "../lib/discardReasons";
 
 interface Props {
   batch: Batch;
@@ -17,8 +18,8 @@ export function DiscardReasonDialog({ batch, onClose, onConfirm }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!reason.trim()) {
-      setError("יש לציין סיבת פחת");
+    if (!reason) {
+      setError("יש לבחור סיבת פחת");
       return;
     }
     const quantityNumber = Number(quantity);
@@ -29,7 +30,7 @@ export function DiscardReasonDialog({ batch, onClose, onConfirm }: Props) {
     setBusy(true);
     setError(null);
     try {
-      await onConfirm(reason.trim(), quantityNumber);
+      await onConfirm(reason, quantityNumber);
     } catch {
       setError("הפעולה נכשלה — נסה/י שוב");
       setBusy(false);
@@ -52,12 +53,19 @@ export function DiscardReasonDialog({ batch, onClose, onConfirm }: Props) {
         />
 
         <label htmlFor="discard-reason">סיבת פחת</label>
-        <textarea
+        <select
           id="discard-reason"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           autoFocus
-        />
+        >
+          <option value="">בחר/י סיבה...</option>
+          {DISCARD_REASONS.map((r) => (
+            <option key={r} value={r}>
+              {r}
+            </option>
+          ))}
+        </select>
 
         {!online && <p className="error-text">אין חיבור לאינטרנט — לא ניתן לשמור כרגע</p>}
         {error && <p className="error-text">{error}</p>}

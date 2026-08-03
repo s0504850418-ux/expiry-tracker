@@ -79,6 +79,7 @@ nameLower: string        // לבדיקת ייחודיות שם, case-insensitive
 unit: 'kg' | 'liter' | 'unit'     // קבוע למוצר, אין המרה בין יחידות
 shelfLifeMinutes: number
 partialUsageUpdateFrequency: 'endOfBatchLife' | 'endOfDay' | null   // null = להשתמש בברירת המחדל של העסק
+notifyBeforeExpiryMinutes: number | null   // כמה דקות לפני תפוגה לשלוח התראה; null = להשתמש בערך ברירת המחדל הגלובלי (owner-only, כמו חיי מדף ומחיר — ראו CLAUDE.md)
 currentRecipeVersionId: string | null
 active: boolean          // false = מוצר הופסק, לא נמחק
 createdAt: Timestamp
@@ -128,7 +129,7 @@ preparedAtClient: Timestamp       // מה שהעובד הזין במכשיר
 preparedAtServer: Timestamp       // זמן קבלה בשרת — לזיהוי חריגות/ניתוק
 expiresAt: Timestamp              // מחושב מ-preparedAtClient + shelfLifeMinutes (לא מ-preparedAtServer, כדי שניתוק זמני לא יעוות את התאריך האמיתי)
 status: 'active' | 'used' | 'expired' | 'discarded' | 'archived'
-discardReason: string | null      // חובה כשסטטוס = discarded
+discardReason: string | null      // חובה כשסטטוס = discarded; מרשימה סגורה וקבועה מראש (ראו functions/src/lib/discardReasons.ts), לא טקסט חופשי
 printStatus: 'pending' | 'printed' | 'failed'
 createdByRole: 'owner' | 'shiftManager'
 createdByStaffId: string | null
