@@ -1,6 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import { requireOwner } from "../lib/authz";
+import { requireShiftManagerOrOwner } from "../lib/authz";
 import { writeAuditLog } from "../lib/audit";
 
 interface Data {
@@ -61,10 +61,27 @@ function validate(data: unknown): Data {
  * מעדכנת שדות מוצר קיים. **לא** ניתן לשנות unit (קבוע לכל חיי
  * המוצר). active=false = "מוצר הופסק" — לא מחיקה, אצוות היסטוריות
  * נשארות שלמות.
+ *
+ * מנהל/ת משמרת יכול/ה לשנות name/shelfLifeMinutes בלבד (שלוש רמות
+ * הרשאה, ראו CLAUDE.md) — partialUsageUpdateFrequency/notifyBefore-
+ * ExpiryMinutes/active נשארים owner-only, נדחים במפורש אם נשלחים
+ * ע"י מנהל/ת משמרת (לא מתעלמים מהם בשקט).
  */
 export const updateProduct = onCall(async (request) => {
   const data = validate(request.data);
-  requireOwner(request, data.businessId);
+  const member = requireShiftManagerOrOwner(request, data.businessId);
+
+  if (
+    member.role !== "owner" &&
+    (data.partialUsageUpdateFrequency !== undefined ||
+      data.notifyBeforeExpiryMinutes !== undefined ||
+      data.active !== undefined)
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "תדירות עדכון כמות, זמן התראה לפני תפוגה, וסטטוס פעילות ניתנים לשינוי ע\"י בעל/ת העסק בלבד",
+    );
+  }
 
   const db = getFirestore();
   const productRef = db.doc(`businesses/${data.businessId}/products/${data.productId}`);
@@ -105,8 +122,9 @@ export const updateProduct = onCall(async (request) => {
   await writeAuditLog({
     businessId: data.businessId,
     action: "product.updated",
-    performedByUid: request.auth!.uid,
-    performedByRole: "owner",
+    performedByUid: member.uid,
+    performedByRole: member.role,
+    performedByStaffId: member.staffId ?? null,
     targetType: "product",
     targetId: data.productId,
     metadata: { fields: Object.keys(update) },

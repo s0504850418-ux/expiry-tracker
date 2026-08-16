@@ -1,6 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import { requireOwner } from "../lib/authz";
+import { requireShiftManagerOrOwner } from "../lib/authz";
 import { writeAuditLog } from "../lib/audit";
 
 const UNITS = ["kg", "liter", "unit"] as const;
@@ -66,10 +66,26 @@ function validate(data: unknown): Data {
  * המוצרים כולל לא-פעילים כדי שלא ליצור התנגשות בהפעלה מחדש של שם
  * מוצר שהופסק). unit קבוע לכל חיי המוצר — אין לו endpoint לעדכון,
  * לפי "אין המרה בין יחידות מידה" ב-CLAUDE.md.
+ *
+ * מנהל/ת משמרת יכול/ה ליצור מוצר חדש (שלוש רמות הרשאה, ראו
+ * CLAUDE.md) — אבל רק עם name/unit/shelfLifeMinutes; notifyBefore-
+ * ExpiryMinutes/partialUsageUpdateFrequency נשארים owner-only, בדיוק
+ * כמו חיי מדף ומחיר היו לפני השינוי הזה. אם מנהל/ת משמרת מנסה בכל
+ * זאת לשלוח ערך לא-null לאחד מהם — נדחה במפורש, לא נשמר בשקט כ-null.
  */
 export const createProduct = onCall(async (request) => {
   const data = validate(request.data);
-  requireOwner(request, data.businessId);
+  const member = requireShiftManagerOrOwner(request, data.businessId);
+
+  if (
+    member.role !== "owner" &&
+    (data.partialUsageUpdateFrequency !== null || data.notifyBeforeExpiryMinutes !== null)
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "תדירות עדכון כמות וזמן התראה לפני תפוגה ניתנים לשינוי ע\"י בעל/ת העסק בלבד",
+    );
+  }
 
   const db = getFirestore();
   const productsRef = db.collection(`businesses/${data.businessId}/products`);
@@ -97,8 +113,9 @@ export const createProduct = onCall(async (request) => {
   await writeAuditLog({
     businessId: data.businessId,
     action: "product.created",
-    performedByUid: request.auth!.uid,
-    performedByRole: "owner",
+    performedByUid: member.uid,
+    performedByRole: member.role,
+    performedByStaffId: member.staffId ?? null,
     targetType: "product",
     targetId: productRef.id,
     metadata: { name: data.name },

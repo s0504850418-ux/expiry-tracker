@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { httpsCallable, type FunctionsError } from "firebase/functions";
+import { httpsCallable } from "firebase/functions";
 import { signInWithCustomToken } from "firebase/auth";
 import { auth, functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
 import { useOnlineStatus } from "../lib/useOnlineStatus";
+import { describeError } from "../lib/describeError";
 import { Spinner } from "../components/Spinner";
 
 type Mode = "chooseRole" | "ownerCode" | "staffPicker" | "staffPin";
@@ -13,21 +14,25 @@ interface StaffOption {
   name: string;
 }
 
-function errorMessage(err: unknown): string {
-  const code = (err as FunctionsError | undefined)?.code;
-  switch (code) {
-    case "functions/permission-denied":
-      return "קוד שגוי";
-    case "functions/resource-exhausted":
-      return "יותר מדי ניסיונות כושלים — נסה/י שוב בעוד כמה דקות";
-    case "functions/not-found":
-      return "עסק/עובד לא נמצא";
-    default:
-      return "שגיאה בהתחברות — נסה/י שוב";
-  }
+interface Props {
+  onClose: () => void;
 }
 
-export function LoginScreen() {
+function errorMessage(err: unknown): string {
+  return describeError(err, {
+    "permission-denied": "קוד שגוי",
+    "not-found": "עסק/עובד לא נמצא",
+  });
+}
+
+/**
+ * "שדרוג הרשאות" מעבר לרמת הבסיס השקופה (worker) — נפתח כדיאלוג
+ * מתוך TabletDashboard (לא מסך שלם: כל עובד/ת רגיל/ה כבר בפנים בלי
+ * להתחבר, ראו CLAUDE.md "שלוש רמות הרשאה"). בהצלחה, ה-claims
+ * מתעדכנים אוטומטית (onIdTokenChanged) ו-TabletDashboard סוגר/ת את
+ * הדיאלוג בעצמו — ראו שם.
+ */
+export function LoginScreen({ onClose }: Props) {
   const [mode, setMode] = useState<Mode>("chooseRole");
   const [code, setCode] = useState("");
   const [pin, setPin] = useState("");
@@ -99,90 +104,108 @@ export function LoginScreen() {
   }
 
   return (
-    <main dir="rtl" className="login-screen">
-      <h1>מערכת ניהול תאריכי תפוגה</h1>
+    <div className="dialog-backdrop" dir="rtl">
+      <div className="dialog">
+        <h2>כניסה כמנהל/ת משמרת או בעל/ת העסק</h2>
 
-      {!online && (
-        <p className="error-text">
-          אין חיבור לאינטרנט — לא ניתן להתחבר כרגע. ההתחברות דורשת רשת.
-        </p>
-      )}
+        {!online && (
+          <p className="error-text">
+            אין חיבור לאינטרנט — לא ניתן להתחבר כרגע. ההתחברות דורשת רשת.
+          </p>
+        )}
 
-      {mode === "chooseRole" && (
-        <div className="button-stack">
-          <button type="button" onClick={() => setMode("ownerCode")}>
-            בעל/ת העסק
-          </button>
-          <button type="button" onClick={openStaffPicker} disabled={busy || !online}>
-            {busy && <Spinner />} מנהל/ת משמרת
-          </button>
-        </div>
-      )}
-
-      {mode === "ownerCode" && (
-        <form onSubmit={handleOwnerSubmit} className="login-form">
-          <label htmlFor="owner-code">קוד מנהל</label>
-          <input
-            id="owner-code"
-            type="password"
-            inputMode="numeric"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            autoFocus
-          />
-          <button type="submit" disabled={busy || !online || code.length === 0}>
-            {busy && <Spinner />} כניסה
-          </button>
-          <button type="button" onClick={() => setMode("chooseRole")}>
-            חזרה
-          </button>
-        </form>
-      )}
-
-      {mode === "staffPicker" && (
-        <div className="button-stack">
-          {staff.length === 0 && <p>אין עובדי משמרת פעילים רשומים</p>}
-          {staff.map((s) => (
-            <button
-              key={s.staffId}
-              type="button"
-              onClick={() => {
-                setSelectedStaff(s);
-                setPin("");
-                setError(null);
-                setMode("staffPin");
-              }}
-            >
-              {s.name}
+        {mode === "chooseRole" && (
+          <div className="button-stack">
+            <button type="button" onClick={() => setMode("ownerCode")}>
+              בעל/ת העסק
             </button>
-          ))}
-          <button type="button" onClick={() => setMode("chooseRole")}>
-            חזרה
+            <button type="button" onClick={openStaffPicker} disabled={busy || !online}>
+              {busy && <Spinner />} מנהל/ת משמרת
+            </button>
+          </div>
+        )}
+
+        {mode === "ownerCode" && (
+          <form onSubmit={handleOwnerSubmit} className="login-form">
+            <label htmlFor="owner-code">קוד מנהל</label>
+            <input
+              id="owner-code"
+              type="password"
+              inputMode="numeric"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              autoFocus
+            />
+            <button type="submit" disabled={busy || !online || code.length === 0}>
+              {busy && <Spinner />} כניסה
+            </button>
+            <button type="button" onClick={() => setMode("chooseRole")}>
+              חזרה
+            </button>
+          </form>
+        )}
+
+        {mode === "staffPicker" && (
+          <div className="button-stack">
+            {staff.length === 0 && (
+              <>
+                <p className="warning-text">
+                  אין עדיין עובדי משמרת רשומים במערכת. הוספת עובד/ת דורשת קוד
+                  מנהל של בעל/ת העסק.
+                </p>
+                <button type="button" onClick={() => setMode("ownerCode")}>
+                  מעבר להתחברות כבעל/ת העסק (להוספת עובד/ת)
+                </button>
+              </>
+            )}
+            {staff.map((s) => (
+              <button
+                key={s.staffId}
+                type="button"
+                onClick={() => {
+                  setSelectedStaff(s);
+                  setPin("");
+                  setError(null);
+                  setMode("staffPin");
+                }}
+              >
+                {s.name}
+              </button>
+            ))}
+            <button type="button" onClick={() => setMode("chooseRole")}>
+              חזרה
+            </button>
+          </div>
+        )}
+
+        {mode === "staffPin" && selectedStaff && (
+          <form onSubmit={handleStaffPinSubmit} className="login-form">
+            <label htmlFor="staff-pin">PIN של {selectedStaff.name}</label>
+            <input
+              id="staff-pin"
+              type="password"
+              inputMode="numeric"
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+              autoFocus
+            />
+            <button type="submit" disabled={busy || !online || pin.length === 0}>
+              {busy && <Spinner />} כניסה
+            </button>
+            <button type="button" onClick={() => setMode("staffPicker")}>
+              חזרה
+            </button>
+          </form>
+        )}
+
+        {error && <p className="error-text">{error}</p>}
+
+        <div className="dialog-actions">
+          <button type="button" onClick={onClose}>
+            ביטול
           </button>
         </div>
-      )}
-
-      {mode === "staffPin" && selectedStaff && (
-        <form onSubmit={handleStaffPinSubmit} className="login-form">
-          <label htmlFor="staff-pin">PIN של {selectedStaff.name}</label>
-          <input
-            id="staff-pin"
-            type="password"
-            inputMode="numeric"
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-            autoFocus
-          />
-          <button type="submit" disabled={busy || !online || pin.length === 0}>
-            {busy && <Spinner />} כניסה
-          </button>
-          <button type="button" onClick={() => setMode("staffPicker")}>
-            חזרה
-          </button>
-        </form>
-      )}
-
-      {error && <p className="error-text">{error}</p>}
-    </main>
+      </div>
+    </div>
   );
 }

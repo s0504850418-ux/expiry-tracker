@@ -10,6 +10,10 @@ interface Data {
   quantity: number;
   preparedAtClient: string; // ISO 8601, מוזן בטאבלט
   clientRequestId?: string; // למניעת יצירה כפולה בניסיון חוזר/רשת לא יציבה
+  // מי הכין את האצווה בפועל — לתיעוד/דוחות בלבד, לא מנגנון אבטחה (לא
+  // קשור ל-createdByStaffId/createdByRole למטה, שהם זהות ה-session
+  // המחובר). null = הוכן ע"י בעל/ת העסק (staff לא כולל את הבעלים).
+  preparedByStaffId: string | null;
 }
 
 function validate(data: unknown): Data {
@@ -22,11 +26,12 @@ function validate(data: unknown): Data {
     d.productId.length === 0 ||
     typeof d.quantity !== "number" ||
     !(d.quantity > 0) ||
-    typeof d.preparedAtClient !== "string"
+    typeof d.preparedAtClient !== "string" ||
+    (d.preparedByStaffId !== null && typeof d.preparedByStaffId !== "string")
   ) {
     throw new HttpsError(
       "invalid-argument",
-      "businessId, productId, quantity (חיובי) ו-preparedAtClient נדרשים",
+      "businessId, productId, quantity (חיובי), preparedAtClient ו-preparedByStaffId (מחרוזת או null) נדרשים",
     );
   }
   if (d.clientRequestId !== undefined && typeof d.clientRequestId !== "string") {
@@ -38,6 +43,7 @@ function validate(data: unknown): Data {
     quantity: d.quantity,
     preparedAtClient: d.preparedAtClient,
     clientRequestId: d.clientRequestId,
+    preparedByStaffId: d.preparedByStaffId,
   };
 }
 
@@ -53,7 +59,7 @@ function validate(data: unknown): Data {
  * שליחה כפולה (לחיצה כפולה, ניסיון חוזר אוטומטי אחרי ניתוק רגעי).
  */
 export const createBatch = onCall(async (request) => {
-  const { businessId, productId, quantity, preparedAtClient, clientRequestId } =
+  const { businessId, productId, quantity, preparedAtClient, clientRequestId, preparedByStaffId } =
     validate(request.data);
   const member = requireBusinessMember(request, businessId);
 
@@ -69,6 +75,16 @@ export const createBatch = onCall(async (request) => {
     );
   }
 
+  // preparedByStaffId=null מייצג "הוכן ע"י בעל/ת העסק" — לא תקין
+  // כשמי שמחובר/ת הוא/היא לא ה-owner, אחרת מנהל/ת משמרת יכול/ה לייחס
+  // הכנה לבעלים בלי שהוא/היא בכלל היה/הייתה שם.
+  if (preparedByStaffId === null && member.role !== "owner") {
+    throw new HttpsError(
+      "invalid-argument",
+      "preparedByStaffId נדרש (רק בעל/ת העסק יכול/ה להכין בלי לבחור עובד/ת)",
+    );
+  }
+
   const db = getFirestore();
   const productRef = db.doc(`businesses/${businessId}/products/${productId}`);
   const productSnap = await productRef.get();
@@ -76,6 +92,19 @@ export const createBatch = onCall(async (request) => {
     throw new HttpsError("not-found", "מוצר לא נמצא או לא פעיל");
   }
   const product = productSnap.data()!;
+
+  let preparedByNameSnapshot: string;
+  if (preparedByStaffId === null) {
+    preparedByNameSnapshot = "בעל/ת העסק";
+  } else {
+    const staffSnap = await db
+      .doc(`businesses/${businessId}/staff/${preparedByStaffId}`)
+      .get();
+    if (!staffSnap.exists) {
+      throw new HttpsError("not-found", "העובד/ת שנבחר/ה לא נמצא/ה — רענן/י ובחר/י שוב");
+    }
+    preparedByNameSnapshot = staffSnap.data()!.name as string;
+  }
 
   const expiresAt = computeExpiresAt(
     preparedAtClientDate,
@@ -111,11 +140,18 @@ export const createBatch = onCall(async (request) => {
       preparedAtClient: Timestamp.fromDate(preparedAtClientDate),
       preparedAtServer: FieldValue.serverTimestamp(),
       expiresAt: Timestamp.fromDate(expiresAt),
+      // נקודת ההתחלה לבדיקת "עודכן היום" (ראו src/lib/quantityReminder.ts) —
+      // אצווה חדשה נחשבת "מעודכנת" ברגע היצירה, גם בלי קריאה מפורשת
+      // ל-updateBatchQuantity.
+      quantityLastUpdatedAt: FieldValue.serverTimestamp(),
       status: "active",
       discardReason: null,
       printStatus: "pending",
       createdByRole: member.role,
       createdByStaffId: member.staffId ?? null,
+      // מי הכין בפועל — לתיעוד/דוח פחת לפי עובד בלבד, ראו למעלה.
+      preparedByStaffId,
+      preparedByNameSnapshot,
       lastModifiedAt: FieldValue.serverTimestamp(),
       archivedAt: null,
     });
@@ -140,7 +176,7 @@ export const createBatch = onCall(async (request) => {
     performedByStaffId: member.staffId ?? null,
     targetType: "batch",
     targetId: batchRef.id,
-    metadata: { productId, quantity },
+    metadata: { productId, quantity, preparedByStaffId },
   });
 
   return { batchId: batchRef.id, expiresAt: expiresAt.toISOString() };

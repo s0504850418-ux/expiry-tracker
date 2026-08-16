@@ -34,7 +34,7 @@ settings: {
 ```
 כתיבה: רק Admin SDK. קריאה: owner/shiftManager של אותו עסק בלבד.
 
-**פער שנמצא בסקירה עצמית (2026-08-03, ראו CLAUDE.md שלב 11):** `settings.defaultPartialUsageUpdateFrequency` נכתב ב-`bootstrapBusiness.ts` אבל אף Cloud Function לא קורא אותו בפועל כברירת מחדל — ומעבר לזה, גם הערך `'endOfDay'` עצמו (בין ברמת המוצר ובין ברמת העסק) לא מחובר לשום מנגנון עדכון-כמות-על-אצווה-פעילה שקיים בפועל. ראו הפירוט המלא ב-CLAUDE.md.
+**פער שנמצא בסקירה עצמית (2026-08-03, ראו CLAUDE.md שלב 11), חלקית תוקן בשלב 12:** המנגנון עצמו (`updateBatchQuantity`, UI, תזכורת) **נבנה בשלב 12** — אבל רק ברמת המוצר, כשה-`partialUsageUpdateFrequency` שלו מוגדר במפורש ל-`'endOfDay'`. `settings.defaultPartialUsageUpdateFrequency` (ברמת העסק, עבור מוצרים עם `partialUsageUpdateFrequency: null`) עדיין נכתב ב-`bootstrapBusiness.ts` בלבד ואף קוד לא קורא אותו — פער שנשאר פתוח במפורש. ראו הפירוט המלא ב-CLAUDE.md.
 
 ### תת-אוסף `businesses/{businessId}/secrets/owner`
 
@@ -113,11 +113,15 @@ ingredients: [{
   pricePerUnitSnapshot: number,
   lineCostSnapshot: number
 }]
-totalCostSnapshot: number
+yieldQuantity: number       // כמה יוצא מהמתכון, ביחידת המוצר (למשל 20 ליטר) — ראו CLAUDE.md, "תפוקת מתכון"
+totalCostSnapshot: number   // עלות הכנה אחת מלאה של המתכון (סכום lineCostSnapshot)
+costPerUnitSnapshot: number // = round2(totalCostSnapshot / yieldQuantity), מחושב ונשמר בזמן היצירה
 createdAt: Timestamp
 createdByUid: string
 ```
-שינוי מתכון = מסמך חדש (גרסה חדשה), לעולם לא עריכה של גרסה קיימת. אצווה שומרת `recipeVersionId` — עדכון מחיר מרכיב משפיע רק על גרסאות עתידיות כי המחיר נשמר כ-snapshot. כתיבה: רק Admin SDK. קריאה: owner בלבד (עלויות = כספי).
+שינוי מתכון = מסמך חדש (גרסה חדשה), לעולם לא עריכה של גרסה קיימת. אצווה שומרת `recipeVersionId` — עדכון מחיר מרכיב משפיע רק על גרסאות עתידיות כי המחיר נשמר כ-snapshot. **שמירה עם בדיוק אותם מרכיבים/כמויות/תפוקה כמו הגרסה הנוכחית לא יוצרת גרסה חדשה** (`createRecipeVersion` בודקת זהות תוכן לפני כתיבה ומחזירה `unchanged:true` על הגרסה הקיימת) — מונע קפיצת מספר גרסה משמירות חוזרות בלי שינוי אמיתי. כתיבה: רק Admin SDK. קריאה: owner בלבד (עלויות = כספי).
+
+**חשיפה חלקית ל-shiftManager**: `costPerUnitSnapshot`/`pricePerUnitSnapshot`/`lineCostSnapshot`/`totalCostSnapshot` הם נתון כספי ונשארים owner-only לגמרי (גם ב-Rules וגם בכל קריאה ישירה). כדי שמנהל/ת משמרת עדיין יוכל/תוכל לראות **כמויות** מרכיבים (לא מחירים) ביצירת אצווה, יש Cloud Function ייעודית — `getRecipePreview({businessId, productId})` — שקוראת את המסמך הזה בצד השרת (Admin SDK) ומחזירה רק `{ingredientNameSnapshot, unit, perUnitQuantity}` לכל שורה (`perUnitQuantity = quantity/yieldQuantity`), בלי אף שדה כספי. אותה תבנית כמו `listActiveStaffNames`.
 
 ### תת-אוסף `businesses/{businessId}/batches/{batchId}`
 
@@ -126,10 +130,13 @@ productId: string
 productNameSnapshot: string
 unit: string                      // snapshot מהמוצר
 recipeVersionId: string | null
-quantity: number                  // כמות נוכחית/שנותרה; מתעדכנת ב-updateBatchStatus (למשל לכמות שבאמת הושלכה)
-preparedQuantity: number          // הכמות שהוכנה בפועל ביצירה — קבועה לעולם, לא מתעדכנת. משמשת לחישוב עלות פחת יחסית בדוח (quantity/preparedQuantity), כי costSnapshot של המתכון הוא עלות ההכנה המלאה
+quantity: number                  // כמות נוכחית/שנותרה; מתעדכנת ב-updateBatchStatus (מעבר לסטטוס סופי) וב-updateBatchQuantity (שימוש חלקי באמצע חיי אצווה active) — שני המקומות היחידים, אין היסטוריית עדכונים
+preparedQuantity: number          // הכמות שהוכנה בפועל ביצירה — קבועה לעולם, לא מתעדכנת אף פעם (גם לא ע"י updateBatchQuantity). עלות האצווה בפועל = recipeVersion.costPerUnitSnapshot * preparedQuantity (לא totalCostSnapshot הגולמי — ראו סעיף recipeVersions למעלה); הדוח מייחס לפחת רק את החלק היחסי (quantity/preparedQuantity) בזמן ההשלכה הסופית
+quantityLastUpdatedAt: Timestamp  // זמן העדכון האחרון של quantity; נכתב ביצירה (=preparedAtServer) ומתעדכן ב-updateBatchQuantity בלבד (לא ב-updateBatchPrintStatus/updateBatchStatus) — משמש רק לתזכורת "עודכן היום?" ב-endOfDay (ראו src/lib/quantityReminder.ts), לא לדוח הכספי
 preparedAtClient: Timestamp       // מה שהעובד הזין במכשיר
 preparedAtServer: Timestamp       // זמן קבלה בשרת — לזיהוי חריגות/ניתוק
+preparedByStaffId: string | null  // מי הכין בפועל — לתיעוד/דוח פחת-לפי-עובד בלבד, לא אימות. null = הוכן ע"י בעל/ת העסק. לא קשור ל-createdByStaffId למטה (זהות ה-session המחובר)
+preparedByNameSnapshot: string    // snapshot של שם המכין/ה, עקבי עם productNameSnapshot
 expiresAt: Timestamp              // מחושב מ-preparedAtClient + shelfLifeMinutes (לא מ-preparedAtServer, כדי שניתוק זמני לא יעוות את התאריך האמיתי)
 status: 'active' | 'used' | 'expired' | 'discarded' | 'archived'
 discardReason: string | null      // חובה כשסטטוס = discarded; מרשימה סגורה וקבועה מראש (ראו functions/src/lib/discardReasons.ts), לא טקסט חופשי

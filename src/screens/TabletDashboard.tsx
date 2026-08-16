@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import {
   collection,
   onSnapshot,
@@ -19,6 +19,17 @@ import { QrScannerDialog } from "../scanning/QrScannerDialog";
 import { NotificationsPanel } from "../components/NotificationsPanel";
 import { useOnlineStatus } from "../lib/useOnlineStatus";
 import { EnvBadge } from "../components/EnvBadge";
+import { needsDailyQuantityUpdate } from "../lib/quantityReminder";
+import { describeError } from "../lib/describeError";
+import { TeamManagement } from "../admin/TeamManagement";
+import { ProductsManagement } from "../admin/ProductsManagement";
+import { LoginScreen } from "./LoginScreen";
+
+const ROLE_LABEL: Record<string, string> = {
+  owner: "בעל/ת העסק",
+  shiftManager: "מנהל/ת משמרת",
+  worker: "עובד/ת",
+};
 
 function toDate(value: Timestamp | Date | undefined): Date {
   if (!value) return new Date(0);
@@ -45,12 +56,26 @@ export function TabletDashboard() {
   const [focusedBatchId, setFocusedBatchId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [showTeamManagement, setShowTeamManagement] = useState(false);
+  const [showProductsManagement, setShowProductsManagement] = useState(false);
+  const [showLoginDialog, setShowLoginDialog] = useState(false);
   const online = useOnlineStatus();
 
   function flashToast(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(null), 2500);
   }
+
+  // סוגר את דיאלוג "כניסה כמנהל/ת משמרת/בעל/ת העסק" אוטומטית ברגע
+  // שההתחברות הצליחה בפועל (claims כבר לא worker) — לא צריך כפתור
+  // "סגירה" נוסף אחרי login מוצלח.
+  const prevRoleRef = useRef(claims?.role);
+  useEffect(() => {
+    if (prevRoleRef.current === "worker" && claims?.role && claims.role !== "worker") {
+      setShowLoginDialog(false);
+    }
+    prevRoleRef.current = claims?.role;
+  }, [claims?.role]);
 
   useEffect(() => {
     const batchesQuery = query(
@@ -68,6 +93,7 @@ export function TabletDashboard() {
             productNameSnapshot: data.productNameSnapshot,
             unit: data.unit,
             quantity: data.quantity,
+            quantityLastUpdatedAt: toDate(data.quantityLastUpdatedAt ?? data.preparedAtClient),
             expiresAt: toDate(data.expiresAt),
             preparedAtClient: toDate(data.preparedAtClient),
             status: data.status,
@@ -135,6 +161,21 @@ export function TabletDashboard() {
     }
   }
 
+  async function updateQuantity(batchId: string, quantity: number) {
+    setBusyBatchId(batchId);
+    setActionError(null);
+    try {
+      const updateBatchQuantity = httpsCallable<
+        { businessId: string; batchId: string; quantity: number },
+        { success: boolean }
+      >(functions, "updateBatchQuantity");
+      await updateBatchQuantity({ businessId, batchId, quantity });
+      flashToast("הכמות עודכנה");
+    } finally {
+      setBusyBatchId(null);
+    }
+  }
+
   return (
     <main dir="rtl" className="dashboard">
       {toast && (
@@ -147,12 +188,57 @@ export function TabletDashboard() {
         <h1>אצוות פעילות (לפי FEFO)</h1>
         <div>
           <EnvBadge />
-          <span>{claims?.role === "owner" ? "בעל/ת העסק" : "מנהל/ת משמרת"}</span>
-          <button type="button" onClick={() => signOut()}>
-            יציאה
-          </button>
+          <span>{ROLE_LABEL[claims?.role ?? "worker"]}</span>
+          {(claims?.role === "shiftManager" || claims?.role === "owner") && (
+            <button type="button" onClick={() => setShowProductsManagement(true)}>
+              מוצרים ומרכיבים
+            </button>
+          )}
+          {claims?.role === "owner" && (
+            <button type="button" onClick={() => setShowTeamManagement(true)}>
+              ניהול צוות
+            </button>
+          )}
+          {claims?.role === "worker" && (
+            <button type="button" onClick={() => setShowLoginDialog(true)}>
+              כניסה כמנהל/ת משמרת / בעל/ת העסק
+            </button>
+          )}
+          {(claims?.role === "shiftManager" || claims?.role === "owner") && (
+            <button type="button" onClick={() => signOut()}>
+              יציאה
+            </button>
+          )}
         </div>
       </header>
+
+      {showLoginDialog && <LoginScreen onClose={() => setShowLoginDialog(false)} />}
+
+      {showTeamManagement && (
+        <div className="dialog-backdrop" dir="rtl">
+          <div className="dialog">
+            <TeamManagement />
+            <div className="dialog-actions">
+              <button type="button" onClick={() => setShowTeamManagement(false)}>
+                סגירה
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showProductsManagement && (
+        <div className="dialog-backdrop" dir="rtl">
+          <div className="dialog dialog-wide">
+            <ProductsManagement />
+            <div className="dialog-actions">
+              <button type="button" onClick={() => setShowProductsManagement(false)}>
+                סגירה
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {!online && (
         <p className="error-text">
@@ -162,6 +248,15 @@ export function TabletDashboard() {
       )}
 
       {actionError && <p className="error-text">{actionError}</p>}
+
+      {products.length === 0 && online && (
+        <p className="warning-text">
+          עדיין אין מוצרים מוגדרים בעסק, ולכן אי אפשר ליצור אצווה.{" "}
+          {claims?.role === "owner" || claims?.role === "shiftManager"
+            ? 'יש להוסיף מוצר דרך כפתור "מוצרים ומרכיבים" למעלה.'
+            : "יש לפנות למנהל/ת משמרת או לבעל/ת העסק כדי שיוסיפו מוצר."}
+        </p>
+      )}
 
       <div className="dashboard-toolbar">
         <input
@@ -210,17 +305,34 @@ export function TabletDashboard() {
               batch={batch}
               busy={busyBatchId === batch.id}
               disabled={!online}
+              needsQuantityUpdateReminder={needsDailyQuantityUpdate(
+                batch,
+                products.find((p) => p.id === batch.productId),
+              )}
               onMarkUsed={() =>
                 updateStatus(batch.id, "used")
                   .then(() => flashToast(STATUS_TOAST_LABEL.used))
-                  .catch(() => setActionError("עדכון הסטטוס נכשל — נסה/י שוב"))
+                  .catch((err) =>
+                    setActionError(
+                      describeError(err, {
+                        "failed-precondition": "האצווה כבר טופלה — רענן/י את הרשימה",
+                      }),
+                    ),
+                  )
               }
               onMarkExpired={() =>
                 updateStatus(batch.id, "expired")
                   .then(() => flashToast(STATUS_TOAST_LABEL.expired))
-                  .catch(() => setActionError("עדכון הסטטוס נכשל — נסה/י שוב"))
+                  .catch((err) =>
+                    setActionError(
+                      describeError(err, {
+                        "failed-precondition": "האצווה כבר טופלה — רענן/י את הרשימה",
+                      }),
+                    ),
+                  )
               }
               onMarkDiscarded={() => setDiscardTarget(batch)}
+              onUpdateQuantity={(quantity) => updateQuantity(batch.id, quantity)}
             />
           ))}
         </ul>

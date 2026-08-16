@@ -11,12 +11,21 @@ export interface Product {
   notifyBeforeExpiryMinutes: number | null;
 }
 
+export type PriceStatus = "set" | "pending";
+
 export interface Ingredient {
   id: string;
   name: string;
   unit: string;
-  currentPricePerUnit: number;
   active: boolean;
+  // null = "ממתין למחיר" (מנהל/ת משמרת יכול/ה ליצור מרכיב בלי מחיר).
+  // undefined = השרת לא שלח את השדה בכלל (listIngredients מצנזרת
+  // אותו לחלוטין עבור מי שאינו owner — לא רק null, נעדר) — ראו
+  // functions/src/ingredients/listIngredients.ts.
+  currentPricePerUnit?: number | null;
+  // מגיע מ-listIngredients לשני התפקידים; לא נתון כספי (לא חושף
+  // כמה, רק אם הוגדר בכלל).
+  priceStatus?: PriceStatus;
 }
 
 export interface RecipeLine {
@@ -24,15 +33,19 @@ export interface RecipeLine {
   ingredientNameSnapshot: string;
   quantity: number;
   unit: string;
-  pricePerUnitSnapshot: number;
-  lineCostSnapshot: number;
+  // נעדרים לגמרי מהתשובה כש-caller אינו owner (getRecipeVersionForEdit/
+  // createRecipeVersion) — נתון כספי, ראו CLAUDE.md.
+  pricePerUnitSnapshot?: number | null;
+  lineCostSnapshot?: number | null;
 }
 
 export interface RecipeVersion {
   id: string;
   versionNumber: number;
   ingredients: RecipeLine[];
-  totalCostSnapshot: number;
+  yieldQuantity: number;
+  totalCostSnapshot?: number | null;
+  costPerUnitSnapshot?: number | null;
 }
 
 export type BatchStatus = "active" | "used" | "expired" | "discarded" | "archived";
@@ -44,6 +57,7 @@ export interface Batch {
   productNameSnapshot: string;
   unit: string;
   quantity: number;
+  quantityLastUpdatedAt: Date;
   expiresAt: Date;
   preparedAtClient: Date;
   status: BatchStatus;

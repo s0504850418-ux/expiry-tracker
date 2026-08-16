@@ -4,6 +4,7 @@ import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
 import { StaffFormDialog } from "./StaffFormDialog";
+import { describeError } from "../lib/describeError";
 import { Spinner } from "../components/Spinner";
 
 export interface Staff {
@@ -48,8 +49,8 @@ export function TeamManagement() {
         name: member.name,
         active: !member.active,
       });
-    } catch {
-      setError("העדכון נכשל — נסה/י שוב");
+    } catch (err) {
+      setError(describeError(err));
     } finally {
       setBusyStaffId(null);
     }

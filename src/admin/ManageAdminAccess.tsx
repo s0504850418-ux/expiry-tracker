@@ -2,6 +2,7 @@ import { useState } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
+import { describeError } from "../lib/describeError";
 import { Spinner } from "../components/Spinner";
 
 export function ManageAdminAccess() {
@@ -20,8 +21,12 @@ export function ManageAdminAccess() {
       await addAuthorizedOwnerEmail({ businessId: getBusinessId(), email });
       setMessage(`הכתובת ${email} הורשתה לגשת למסך הניהול`);
       setEmail("");
-    } catch {
-      setError("ההוספה נכשלה — ודא/י שהכתובת תקינה ונסה/י שוב");
+    } catch (err) {
+      setError(
+        describeError(err, {
+          "invalid-argument": "כתובת ה-Gmail שהוזנה לא תקינה",
+        }),
+      );
     } finally {
       setBusy(false);
     }

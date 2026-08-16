@@ -9,7 +9,10 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test:rules": "firebase emulators:exec --only firestore --project demo-expiry-tracker \"node --test tests/rules.test.js\"",
-    "test:functions": "cross-env FUNCTIONS_DISCOVERY_TIMEOUT=30 firebase emulators:exec --only auth,firestore,functions --project demo-expiry-tracker \"node --test tests/functions.test.js\""
+    "test:functions": "cross-env FUNCTIONS_DISCOVERY_TIMEOUT=30 firebase emulators:exec --only auth,firestore,functions --project demo-expiry-tracker \"node --test tests/functions.test.js\"",
+    "emulators": "cross-env FUNCTIONS_DISCOVERY_TIMEOUT=30 firebase emulators:start --only auth,firestore,functions --project demo-expiry-tracker --import=emulator-data --export-on-exit=emulator-data",
+    "setup:demo": "node scripts/setup-demo.mjs",
+    "start:all": "node scripts/prestart-all.mjs && concurrently -k -n emulators,app -c blue,green \"npm run emulators\" \"npm run dev\""
   },
   "dependencies": {
     "firebase": "^12.16.0",
@@ -26,6 +29,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "bcryptjs": "^3.0.2",
+    "concurrently": "^9.2.4",
     "cross-env": "^10.1.0",
     "firebase-admin": "^13.10.0",
     "firebase-tools": "^15.25.0",

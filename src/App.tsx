@@ -1,31 +1,25 @@
-import { AuthProvider } from "./auth/AuthContext";
-import { useAuth } from "./auth/useAuth";
-import { LoginScreen } from "./screens/LoginScreen";
-import { TabletDashboard } from "./screens/TabletDashboard";
-import { AdminApp } from "./admin/AdminApp";
+import { lazy, Suspense } from "react";
 import { Spinner } from "./components/Spinner";
 
-function AppContent() {
-  const { claims, loading } = useAuth();
+// כל נתיב נטען כ-chunk נפרד (React.lazy/import דינמי) כדי שכל צד יוריד
+// רק את הקוד שהוא בפועל צריך — לפני התיקון הזה כל הביקורים (טאבלט
+// ו-/admin כאחד) הורידו חבילת JS אחת של 1.03MB (317KB gzip) שכללה גם
+// את כל מסכי הניהול (מוצרים/מתכונים/דוח פחת/צוות) עבור מכשיר הטאבלט,
+// ולהפך.
+const TabletApp = lazy(() =>
+  import("./TabletApp").then((m) => ({ default: m.TabletApp })),
+);
+const AdminApp = lazy(() =>
+  import("./admin/AdminApp").then((m) => ({ default: m.AdminApp })),
+);
 
-  if (loading) {
-    return (
-      <main dir="rtl" className="login-screen">
-        <p>
-          <Spinner /> טוען...
-        </p>
-      </main>
-    );
-  }
-
-  return claims ? <TabletDashboard /> : <LoginScreen />;
-}
-
-function TabletApp() {
+function RouteLoadingFallback() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <main dir="rtl" className="login-screen">
+      <p>
+        <Spinner /> טוען...
+      </p>
+    </main>
   );
 }
 
@@ -37,7 +31,11 @@ function TabletApp() {
  */
 function App() {
   const isAdmin = window.location.pathname.startsWith("/admin");
-  return isAdmin ? <AdminApp /> : <TabletApp />;
+  return (
+    <Suspense fallback={<RouteLoadingFallback />}>
+      {isAdmin ? <AdminApp /> : <TabletApp />}
+    </Suspense>
+  );
 }
 
 export default App;

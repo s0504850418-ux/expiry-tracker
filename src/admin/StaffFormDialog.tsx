@@ -3,6 +3,7 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
 import type { Staff } from "./TeamManagement";
+import { describeError } from "../lib/describeError";
 import { Spinner } from "../components/Spinner";
 
 interface Props {
@@ -45,8 +46,8 @@ export function StaffFormDialog({ staff, newStaffId, onClose, onSaved }: Props) 
         ...(pin.length > 0 ? { pin } : {}),
       });
       onSaved();
-    } catch {
-      setError("השמירה נכשלה — נסה/י שוב");
+    } catch (err) {
+      setError(describeError(err));
     } finally {
       setBusy(false);
     }

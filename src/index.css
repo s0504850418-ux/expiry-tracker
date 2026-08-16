@@ -238,6 +238,25 @@ label {
   flex-shrink: 0;
 }
 
+/* מידע/אזהרה שאינם כשל בפועל (למשל "אין עדיין מתכון למוצר") — כתום,
+   לא אדום, כדי לא להיראות כמו שגיאה כשלמעשה שום דבר לא נכשל. */
+.warning-text {
+  color: var(--color-warning);
+  font-weight: 600;
+  background: var(--color-warning-bg);
+  border: 1.5px solid var(--color-warning-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.warning-text::before {
+  content: "ℹ";
+  flex-shrink: 0;
+}
+
 .spinner {
   display: inline-block;
   width: 1.1em;
@@ -442,10 +461,46 @@ label {
   border: 1px solid var(--color-success-border);
 }
 
+/* תזכורת ויזואלית: מוצר "כל סוף יום" שהכמות שלו לא עודכנה היום. לא
+   התראה חוצה-מכשירים (notifications collection) — רק סימון ברשימה. */
+.reminder-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  align-self: flex-start;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  border: 1px solid var(--color-warning-border);
+}
+
 .batch-actions {
   display: flex;
   gap: var(--space-2);
   flex-wrap: wrap;
+}
+
+/* עדכון כמות מהיר בתוך שורת האצווה — לא דיאלוג נפרד */
+.quantity-update-form {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.quantity-update-form label {
+  white-space: nowrap;
+}
+
+.quantity-update-form input {
+  max-width: 8rem;
+}
+
+.quantity-update-form .error-text {
+  flex-basis: 100%;
 }
 
 /* ===== דיאלוגים ===== */
@@ -475,6 +530,12 @@ label {
   box-shadow: var(--shadow-modal);
 }
 
+/* דיאלוג רחב יותר — למסכים עם טבלאות (למשל "מוצרים ומרכיבים" כשהוא
+   מוטמע כדיאלוג בטאבלט, לא כמסך מלא כמו ב-/admin). */
+.dialog-wide {
+  max-width: 900px;
+}
+
 .dialog-actions {
   display: flex;
   gap: var(--space-3);
@@ -485,16 +546,41 @@ label {
 .recipe-line {
   display: flex;
   gap: var(--space-2);
-  align-items: center;
+  align-items: flex-end;
+  flex-wrap: wrap;
   margin-bottom: var(--space-2);
 }
 
-.recipe-line select {
-  flex: 2;
+.recipe-line-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
-.recipe-line input {
+.recipe-line-field label {
+  font-size: 0.85rem;
+}
+
+.recipe-line-field.ingredient {
+  flex: 2;
+  min-width: 140px;
+}
+
+.recipe-line-field.quantity {
   flex: 1;
+  min-width: 80px;
+}
+
+.recipe-line .error-text {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+/* הסבר קצר צמוד לשדה (למשל תפוקת מתכון) — לא שגיאה/אזהרה */
+.field-hint {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin: 0 0 var(--space-2);
 }
 
 /* ===== פאנל התראות ===== */

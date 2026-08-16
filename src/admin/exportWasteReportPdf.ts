@@ -1,4 +1,4 @@
-import type { ReportBatch } from "./WasteReport";
+import type { EmployeeBreakdown, ReportBatch } from "./WasteReport";
 
 const PRINT_ROOT_ID = "print-label-root";
 
@@ -7,6 +7,7 @@ interface Summary {
   wasteCost: number;
   batchesWithoutCost: number;
   byProduct: { productName: string; wasteCost: number; wasteBatchCount: number }[];
+  byEmployee: EmployeeBreakdown[];
 }
 
 interface Params {
@@ -79,6 +80,38 @@ export function exportWasteReportPdf({ startDate, endDate, batches, summary }: P
       row.appendChild(el("td", p.productName));
       row.appendChild(el("td", String(p.wasteBatchCount)));
       row.appendChild(el("td", p.wasteCost.toFixed(2)));
+      tbody.appendChild(row);
+    }
+    table.appendChild(tbody);
+    container.appendChild(table);
+  }
+
+  const employeeHeading = el("h2", "פחת לפי עובד");
+  container.appendChild(employeeHeading);
+  if (summary.byEmployee.length === 0) {
+    container.appendChild(el("p", "אין פחת בטווח שנבחר"));
+  } else {
+    const table = el("table");
+    const thead = el("thead");
+    const headRow = el("tr");
+    headRow.appendChild(el("th", "עובד/ת"));
+    headRow.appendChild(el("th", "מס' אצוות"));
+    headRow.appendChild(el("th", "שווי פחת"));
+    headRow.appendChild(el("th", "פירוט לפי סיבה"));
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+    const tbody = el("tbody");
+    for (const emp of summary.byEmployee) {
+      const row = el("tr");
+      row.appendChild(el("td", emp.employeeName));
+      row.appendChild(el("td", String(emp.wasteBatchCount)));
+      row.appendChild(el("td", emp.wasteCost.toFixed(2)));
+      row.appendChild(
+        el(
+          "td",
+          emp.byReason.map((r) => `${r.reason}: ${r.wasteBatchCount} (${r.wasteCost.toFixed(2)})`).join(" · "),
+        ),
+      );
       tbody.appendChild(row);
     }
     table.appendChild(tbody);

@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Batch } from "../lib/types";
 import { useOnlineStatus } from "../lib/useOnlineStatus";
 import { DISCARD_REASONS } from "../lib/discardReasons";
+import { describeError } from "../lib/describeError";
 import { Spinner } from "./Spinner";
 
 interface Props {
@@ -32,8 +33,13 @@ export function DiscardReasonDialog({ batch, onClose, onConfirm }: Props) {
     setError(null);
     try {
       await onConfirm(reason, quantityNumber);
-    } catch {
-      setError("הפעולה נכשלה — נסה/י שוב");
+    } catch (err) {
+      setError(
+        describeError(err, {
+          "invalid-argument": "הכמות שהוזנה לא תקינה (גדולה מהכמות שהוכנה במקור?)",
+          "failed-precondition": "האצווה כבר טופלה במקום אחר — רענן/י את הרשימה",
+        }),
+      );
       setBusy(false);
     }
   }

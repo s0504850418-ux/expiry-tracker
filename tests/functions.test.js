@@ -390,6 +390,7 @@ test("createBatch יוצר אצווה עם expiresAt מחושב נכון, ודו
       productId: PRODUCT_ID,
       quantity: 5,
       preparedAtClient,
+      preparedByStaffId: STAFF_ID,
     }),
   );
   assert.ok(data.batchId);
@@ -405,6 +406,7 @@ test("createBatch יוצר אצווה עם expiresAt מחושב נכון, ודו
           productId: "inactiveProd",
           quantity: 1,
           preparedAtClient,
+          preparedByStaffId: STAFF_ID,
         }),
       ),
     (err) => {
@@ -426,6 +428,7 @@ test("createBatch עם clientRequestId זהה מחזירה את אותה אצו�
       quantity: 7,
       preparedAtClient,
       clientRequestId,
+      preparedByStaffId: STAFF_ID,
     }),
   );
 
@@ -438,6 +441,7 @@ test("createBatch עם clientRequestId זהה מחזירה את אותה אצו�
       quantity: 7,
       preparedAtClient,
       clientRequestId,
+      preparedByStaffId: STAFF_ID,
     }),
   );
 
@@ -455,6 +459,7 @@ test("updateBatchStatus: שתי קריאות בו-זמנית על אותה אצ�
       productId: PRODUCT_ID,
       quantity: 1,
       preparedAtClient: new Date().toISOString(),
+      preparedByStaffId: STAFF_ID,
     }),
   );
 
@@ -492,6 +497,7 @@ test("updateBatchStatus: מעבר ל-discarded דורש סיבה, ואי אפש�
       productId: PRODUCT_ID,
       quantity: 3,
       preparedAtClient: new Date().toISOString(),
+      preparedByStaffId: STAFF_ID,
     }),
   );
 
@@ -546,6 +552,7 @@ test("preparedQuantity: נשמר קבוע ביצירה, ומגן מפני דיו
       productId: PRODUCT_ID,
       quantity: 10,
       preparedAtClient: new Date().toISOString(),
+      preparedByStaffId: STAFF_ID,
     }),
   );
 
@@ -597,6 +604,159 @@ test("preparedQuantity: נשמר קבוע ביצירה, ומגן מפני דיו
   });
 });
 
+test("updateBatchQuantity: מעדכן כמות נותרת על אצווה פעילה בלי לשנות preparedQuantity, ורושם Audit Log", async () => {
+  const createBatch = httpsCallable(functions, "createBatch");
+  const updateBatchQuantity = httpsCallable(functions, "updateBatchQuantity");
+
+  const { data: created } = await callAsStaff(() =>
+    createBatch({
+      businessId: BUSINESS_ID,
+      productId: PRODUCT_ID,
+      quantity: 5,
+      preparedAtClient: new Date().toISOString(),
+      preparedByStaffId: STAFF_ID,
+    }),
+  );
+
+  await callAsStaff(() =>
+    updateBatchQuantity({ businessId: BUSINESS_ID, batchId: created.batchId, quantity: 3 }),
+  );
+
+  await rulesTestEnv.withSecurityRulesDisabled(async (ctx) => {
+    const snap = await ctx
+      .firestore()
+      .doc(`businesses/${BUSINESS_ID}/batches/${created.batchId}`)
+      .get();
+    assert.equal(snap.data().preparedQuantity, 5); // לא זז
+    assert.equal(snap.data().quantity, 3);
+    assert.ok(snap.data().quantityLastUpdatedAt);
+
+    const auditSnap = await ctx
+      .firestore()
+      .collection(`businesses/${BUSINESS_ID}/auditLog`)
+      .where("targetId", "==", created.batchId)
+      .where("action", "==", "batch.quantityUpdated")
+      .get();
+    assert.equal(auditSnap.size, 1);
+    assert.equal(auditSnap.docs[0].data().metadata.quantity, 3);
+  });
+
+  // עדכון שני, רציף — "5 -> 3 -> 1" (שימוש חלקי מתמשך במהלך היום).
+  await callAsStaff(() =>
+    updateBatchQuantity({ businessId: BUSINESS_ID, batchId: created.batchId, quantity: 1 }),
+  );
+  await rulesTestEnv.withSecurityRulesDisabled(async (ctx) => {
+    const snap = await ctx
+      .firestore()
+      .doc(`businesses/${BUSINESS_ID}/batches/${created.batchId}`)
+      .get();
+    assert.equal(snap.data().preparedQuantity, 5);
+    assert.equal(snap.data().quantity, 1);
+  });
+});
+
+test("updateBatchQuantity: דוחה כמות שלילית, כמות גדולה מ-preparedQuantity, ועדכון על אצווה שאינה פעילה", async () => {
+  const createBatch = httpsCallable(functions, "createBatch");
+  const updateBatchQuantity = httpsCallable(functions, "updateBatchQuantity");
+  const updateBatchStatus = httpsCallable(functions, "updateBatchStatus");
+
+  const { data: created } = await callAsStaff(() =>
+    createBatch({
+      businessId: BUSINESS_ID,
+      productId: PRODUCT_ID,
+      quantity: 4,
+      preparedAtClient: new Date().toISOString(),
+      preparedByStaffId: STAFF_ID,
+    }),
+  );
+
+  await assert.rejects(
+    () =>
+      callAsStaff(() =>
+        updateBatchQuantity({ businessId: BUSINESS_ID, batchId: created.batchId, quantity: -1 }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/invalid-argument");
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    () =>
+      callAsStaff(() =>
+        updateBatchQuantity({ businessId: BUSINESS_ID, batchId: created.batchId, quantity: 9 }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/invalid-argument");
+      return true;
+    },
+  );
+
+  await callAsStaff(() =>
+    updateBatchStatus({
+      businessId: BUSINESS_ID,
+      batchId: created.batchId,
+      newStatus: "used",
+    }),
+  );
+
+  await assert.rejects(
+    () =>
+      callAsStaff(() =>
+        updateBatchQuantity({ businessId: BUSINESS_ID, batchId: created.batchId, quantity: 1 }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/failed-precondition");
+      return true;
+    },
+  );
+});
+
+test("updateBatchQuantity ואז updateBatchStatus(discarded): דוח הפחת מבוסס על הכמות שנזרקה בפועל, לא ההפרש מהעדכון האחרון", async () => {
+  const createBatch = httpsCallable(functions, "createBatch");
+  const updateBatchQuantity = httpsCallable(functions, "updateBatchQuantity");
+  const updateBatchStatus = httpsCallable(functions, "updateBatchStatus");
+
+  // מדמה את תרחיש הבדיקה הידנית בדפדפן: הכנת 5 ק"ג, עדכון ל-3,
+  // עדכון ל-1, ואז השלכה של 1 ק"ג (לא 4, ולא ההפרש 5-1).
+  const { data: created } = await callAsStaff(() =>
+    createBatch({
+      businessId: BUSINESS_ID,
+      productId: PRODUCT_ID,
+      quantity: 5,
+      preparedAtClient: new Date().toISOString(),
+      preparedByStaffId: STAFF_ID,
+    }),
+  );
+  await callAsStaff(() =>
+    updateBatchQuantity({ businessId: BUSINESS_ID, batchId: created.batchId, quantity: 3 }),
+  );
+  await callAsStaff(() =>
+    updateBatchQuantity({ businessId: BUSINESS_ID, batchId: created.batchId, quantity: 1 }),
+  );
+  await callAsStaff(() =>
+    updateBatchStatus({
+      businessId: BUSINESS_ID,
+      batchId: created.batchId,
+      newStatus: "discarded",
+      discardReason: "פג תוקף",
+      quantity: 1,
+    }),
+  );
+
+  await rulesTestEnv.withSecurityRulesDisabled(async (ctx) => {
+    const snap = await ctx
+      .firestore()
+      .doc(`businesses/${BUSINESS_ID}/batches/${created.batchId}`)
+      .get();
+    assert.equal(snap.data().preparedQuantity, 5);
+    assert.equal(snap.data().quantity, 1);
+    assert.equal(snap.data().status, "discarded");
+    // wasteRatio (WasteReport.tsx) = quantity/preparedQuantity = 1/5,
+    // לא (5-1)/5 — הפחת הוא "מה שבאמת נזרק בסוף", לא ההפרש מהעדכונים.
+  });
+});
+
 test("updateBatchStatus מסמנת התראה pending כ-acknowledged אוטומטית כשמטפלים באצווה", async () => {
   const createBatch = httpsCallable(functions, "createBatch");
   const updateBatchStatus = httpsCallable(functions, "updateBatchStatus");
@@ -607,6 +767,7 @@ test("updateBatchStatus מסמנת התראה pending כ-acknowledged אוטומ
       productId: PRODUCT_ID,
       quantity: 4,
       preparedAtClient: new Date().toISOString(),
+      preparedByStaffId: STAFF_ID,
     }),
   );
 
@@ -658,6 +819,7 @@ test("processBusiness (checkExpiringBatches) יוצרת/משדרגת התראו�
       productId: PRODUCT_ID,
       quantity: 1,
       preparedAtClient: soonPreparedAt.toISOString(),
+      preparedByStaffId: STAFF_ID,
     }),
   );
 
@@ -669,6 +831,7 @@ test("processBusiness (checkExpiringBatches) יוצרת/משדרגת התראו�
       productId: PRODUCT_ID,
       quantity: 1,
       preparedAtClient: now.toISOString(),
+      preparedByStaffId: STAFF_ID,
     }),
   );
 
@@ -736,6 +899,7 @@ test("processBusiness: מכבד notifyBeforeExpiryMinutes per-product, לא ער
       productId: PRODUCT_ID, // notifyBeforeExpiryMinutes: null -> ברירת מחדל גלובלית (120)
       quantity: 1,
       preparedAtClient: preparedAt.toISOString(),
+      preparedByStaffId: STAFF_ID,
     }),
   );
   const { data: customWindowBatch } = await callAsStaff(() =>
@@ -744,6 +908,7 @@ test("processBusiness: מכבד notifyBeforeExpiryMinutes per-product, לא ער
       productId: customProduct.productId, // notifyBeforeExpiryMinutes: 300
       quantity: 1,
       preparedAtClient: preparedAt.toISOString(),
+      preparedByStaffId: STAFF_ID,
     }),
   );
 
@@ -780,6 +945,7 @@ test("updateBatchPrintStatus: מעדכן printed/failed לאצווה פעילה,
       productId: PRODUCT_ID,
       quantity: 2,
       preparedAtClient: new Date().toISOString(),
+      preparedByStaffId: STAFF_ID,
     }),
   );
 
@@ -1077,10 +1243,12 @@ test("createIngredient + updateIngredientPrice: מחיר מרכיב מתעדכן
       businessId: BUSINESS_ID,
       productId: product.productId,
       lines: [{ ingredientId: ingredient.ingredientId, quantity: 2 }],
+      yieldQuantity: 2,
     }),
   );
   assert.equal(v1.versionNumber, 1);
   assert.equal(v1.totalCostSnapshot, 10); // 2kg * 5
+  assert.equal(v1.costPerUnitSnapshot, 5); // 10 / yieldQuantity(2)
 
   // מעדכנים את המחיר — לא אמור לשנות למפרע את v1
   await callAsOwner(() =>
@@ -1091,15 +1259,35 @@ test("createIngredient + updateIngredientPrice: מחיר מרכיב מתעדכן
     }),
   );
 
+  // אותן שורות+תפוקה בדיוק כמו v1, אבל אחרי שהמחיר התעדכן — עדיין
+  // אמורה ליצור גרסה חדשה (לא unchanged), כי pricePerUnitSnapshot
+  // המחושב בפועל שונה מ-v1 גם אם ה-ingredientId/quantity/yield זהים.
   const { data: v2 } = await callAsOwner(() =>
     createRecipeVersion({
       businessId: BUSINESS_ID,
       productId: product.productId,
       lines: [{ ingredientId: ingredient.ingredientId, quantity: 2 }],
+      yieldQuantity: 2,
     }),
   );
   assert.equal(v2.versionNumber, 2);
+  assert.equal(v2.unchanged, undefined);
   assert.equal(v2.totalCostSnapshot, 16); // 2kg * 8 (המחיר החדש)
+  assert.equal(v2.costPerUnitSnapshot, 8); // 16 / yieldQuantity(2)
+
+  // שמירה שלישית עם *בדיוק* אותן שורות+תפוקה כמו v2 (בלי שינוי מחיר
+  // הפעם) — לא אמורה ליצור גרסה חדשה בכלל.
+  const { data: v3 } = await callAsOwner(() =>
+    createRecipeVersion({
+      businessId: BUSINESS_ID,
+      productId: product.productId,
+      lines: [{ ingredientId: ingredient.ingredientId, quantity: 2 }],
+      yieldQuantity: 2,
+    }),
+  );
+  assert.equal(v3.unchanged, true);
+  assert.equal(v3.versionNumber, 2); // לא קפץ ל-3
+  assert.equal(v3.recipeVersionId, v2.recipeVersionId);
 
   // shiftManager לא יכול ליצור מרכיב/גרסת מתכון
   await assert.rejects(
@@ -1140,6 +1328,7 @@ test("createRecipeVersion דוחה מרכיב לא קיים ומרכיב כפו�
           businessId: BUSINESS_ID,
           productId: product.productId,
           lines: [{ ingredientId: "no-such-ingredient", quantity: 1 }],
+          yieldQuantity: 1,
         }),
       ),
     (err) => {
@@ -1167,6 +1356,7 @@ test("createRecipeVersion דוחה מרכיב לא קיים ומרכיב כפו�
             { ingredientId: ingredient.ingredientId, quantity: 1 },
             { ingredientId: ingredient.ingredientId, quantity: 2 },
           ],
+          yieldQuantity: 1,
         }),
       ),
     (err) => {
@@ -1174,6 +1364,203 @@ test("createRecipeVersion דוחה מרכיב לא קיים ומרכיב כפו�
       return true;
     },
   );
+});
+
+test("createRecipeVersion דוחה yieldQuantity חסר/לא חיובי", async () => {
+  const createProduct = httpsCallable(functions, "createProduct");
+  const createIngredient = httpsCallable(functions, "createIngredient");
+  const createRecipeVersion = httpsCallable(functions, "createRecipeVersion");
+
+  const { data: product } = await callAsOwner(() =>
+    createProduct({
+      businessId: BUSINESS_ID,
+      name: "מוצר לבדיקת תפוקה",
+      unit: "kg",
+      shelfLifeMinutes: 60,
+    }),
+  );
+  const { data: ingredient } = await callAsOwner(() =>
+    createIngredient({
+      businessId: BUSINESS_ID,
+      name: "מרכיב לבדיקת תפוקה",
+      unit: "kg",
+      pricePerUnit: 2,
+    }),
+  );
+
+  await assert.rejects(
+    () =>
+      callAsOwner(() =>
+        createRecipeVersion({
+          businessId: BUSINESS_ID,
+          productId: product.productId,
+          lines: [{ ingredientId: ingredient.ingredientId, quantity: 1 }],
+          yieldQuantity: 0,
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/invalid-argument");
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    () =>
+      callAsOwner(() =>
+        createRecipeVersion({
+          businessId: BUSINESS_ID,
+          productId: product.productId,
+          lines: [{ ingredientId: ingredient.ingredientId, quantity: 1 }],
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/invalid-argument");
+      return true;
+    },
+  );
+});
+
+test("createBatch: preparedByStaffId — null כ-owner מצליח (\"בעל/ת העסק\"), נדחה כ-shiftManager, ונדחה עם staffId לא קיים", async () => {
+  const createBatch = httpsCallable(functions, "createBatch");
+
+  const { data: ownerBatch } = await callAsOwner(() =>
+    createBatch({
+      businessId: BUSINESS_ID,
+      productId: PRODUCT_ID,
+      quantity: 1,
+      preparedAtClient: new Date().toISOString(),
+      preparedByStaffId: null,
+    }),
+  );
+  await rulesTestEnv.withSecurityRulesDisabled(async (ctx) => {
+    const snap = await ctx
+      .firestore()
+      .doc(`businesses/${BUSINESS_ID}/batches/${ownerBatch.batchId}`)
+      .get();
+    assert.equal(snap.data().preparedByStaffId, null);
+    assert.equal(snap.data().preparedByNameSnapshot, "בעל/ת העסק");
+  });
+
+  // shiftManager חייב לבחור staffId מפורש — null (=בעל/ת העסק) אסור לו.
+  await assert.rejects(
+    () =>
+      callAsStaff(() =>
+        createBatch({
+          businessId: BUSINESS_ID,
+          productId: PRODUCT_ID,
+          quantity: 1,
+          preparedAtClient: new Date().toISOString(),
+          preparedByStaffId: null,
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/invalid-argument");
+      return true;
+    },
+  );
+
+  // staffId שלא קיים בכלל — נדחה.
+  await assert.rejects(
+    () =>
+      callAsStaff(() =>
+        createBatch({
+          businessId: BUSINESS_ID,
+          productId: PRODUCT_ID,
+          quantity: 1,
+          preparedAtClient: new Date().toISOString(),
+          preparedByStaffId: "no-such-staff",
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/not-found");
+      return true;
+    },
+  );
+
+  // מסלול רגיל (staffId קיים) — snapshot נכון של השם.
+  const { data: staffBatch } = await callAsStaff(() =>
+    createBatch({
+      businessId: BUSINESS_ID,
+      productId: PRODUCT_ID,
+      quantity: 1,
+      preparedAtClient: new Date().toISOString(),
+      preparedByStaffId: STAFF_ID,
+    }),
+  );
+  await rulesTestEnv.withSecurityRulesDisabled(async (ctx) => {
+    const snap = await ctx
+      .firestore()
+      .doc(`businesses/${BUSINESS_ID}/batches/${staffBatch.batchId}`)
+      .get();
+    assert.equal(snap.data().preparedByStaffId, STAFF_ID);
+    assert.equal(snap.data().preparedByNameSnapshot, "דנה");
+  });
+});
+
+test("getRecipePreview: מחזירה כמויות-ליחידה בלי אף שדה כספי (גם ל-shiftManager); hasRecipe:false כשאין מתכון", async () => {
+  const createIngredient = httpsCallable(functions, "createIngredient");
+  const createProduct = httpsCallable(functions, "createProduct");
+  const createRecipeVersion = httpsCallable(functions, "createRecipeVersion");
+  const getRecipePreview = httpsCallable(functions, "getRecipePreview");
+
+  const { data: ingredient } = await callAsOwner(() =>
+    createIngredient({
+      businessId: BUSINESS_ID,
+      name: "מרכיב לתצוגה מקדימה",
+      unit: "kg",
+      pricePerUnit: 3,
+    }),
+  );
+  const { data: product } = await callAsOwner(() =>
+    createProduct({
+      businessId: BUSINESS_ID,
+      name: "מוצר לתצוגה מקדימה",
+      unit: "liter",
+      shelfLifeMinutes: 60,
+    }),
+  );
+
+  // בלי מתכון בכלל — hasRecipe: false.
+  const { data: noRecipe } = await callAsStaff(() =>
+    getRecipePreview({ businessId: BUSINESS_ID, productId: product.productId }),
+  );
+  assert.equal(noRecipe.hasRecipe, false);
+
+  await callAsOwner(() =>
+    createRecipeVersion({
+      businessId: BUSINESS_ID,
+      productId: product.productId,
+      lines: [{ ingredientId: ingredient.ingredientId, quantity: 4 }],
+      yieldQuantity: 20, // 20 ליטר יוצא מהמתכון
+    }),
+  );
+
+  const { data: preview } = await callAsStaff(() =>
+    getRecipePreview({ businessId: BUSINESS_ID, productId: product.productId }),
+  );
+  assert.equal(preview.hasRecipe, true);
+  assert.equal(preview.yieldQuantity, 20);
+  assert.equal(preview.lines.length, 1);
+  assert.equal(preview.lines[0].ingredientNameSnapshot, "מרכיב לתצוגה מקדימה");
+  assert.equal(preview.lines[0].unit, "kg");
+  assert.equal(preview.lines[0].perUnitQuantity, 4 / 20);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(preview.lines[0], "pricePerUnitSnapshot"),
+    false,
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(preview.lines[0], "lineCostSnapshot"),
+    false,
+  );
+  assert.equal("totalCostSnapshot" in preview, false);
+  assert.equal("costPerUnitSnapshot" in preview, false);
+
+  // owner מקבל בדיוק אותו דבר — הפונקציה הזו לא owner-only, שני
+  // התפקידים צריכים לראות כמויות ביצירת אצווה.
+  const { data: previewAsOwner } = await callAsOwner(() =>
+    getRecipePreview({ businessId: BUSINESS_ID, productId: product.productId }),
+  );
+  assert.equal(previewAsOwner.lines[0].perUnitQuantity, 4 / 20);
 });
 
 test("נעילה זמנית אחרי כמה ניסיונות PIN כושלים רצופים", async () => {

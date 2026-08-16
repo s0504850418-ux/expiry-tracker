@@ -4,21 +4,16 @@ import {
   signInWithPopup,
   signOut as firebaseSignOut,
 } from "firebase/auth";
-import { httpsCallable, type FunctionsError } from "firebase/functions";
+import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
+import { describeError } from "../lib/describeError";
 import { Spinner } from "../components/Spinner";
 
 function errorMessage(err: unknown): string {
-  const code = (err as FunctionsError | undefined)?.code;
-  switch (code) {
-    case "functions/permission-denied":
-      return "כתובת ה-Gmail הזו לא מורשית לגשת למסך הניהול של העסק הזה";
-    case "functions/not-found":
-      return "עסק לא נמצא";
-    default:
-      return "ההתחברות נכשלה — נסה/י שוב";
-  }
+  return describeError(err, {
+    "permission-denied": "כתובת ה-Gmail הזו לא מורשית לגשת למסך הניהול של העסק הזה",
+  });
 }
 
 /**

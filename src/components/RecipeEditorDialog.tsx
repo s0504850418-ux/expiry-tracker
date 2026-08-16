@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { useCallback, useEffect, useState } from "react";
 import { httpsCallable } from "firebase/functions";
-import { db, functions } from "../firebase/config";
+import { functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
-import type { Ingredient, Product, RecipeVersion } from "../lib/types";
-import { useOnlineStatus } from "../lib/useOnlineStatus";
+import type { Ingredient, Product } from "../lib/types";
+import { RecipeLinesEditor } from "./RecipeLinesEditor";
+import type { LineDraft } from "./RecipeLinesEditor";
+import { describeError } from "../lib/describeError";
 import { Spinner } from "./Spinner";
 
 interface Props {
@@ -13,157 +14,166 @@ interface Props {
   onClose: () => void;
 }
 
-interface LineDraft {
+interface RecipeLineData {
   ingredientId: string;
-  quantity: string;
+  ingredientNameSnapshot: string;
+  quantity: number;
+  unit: string;
+  // נעדרים לגמרי מהתשובה כש-caller אינו owner — ראו
+  // functions/src/recipes/getRecipeVersionForEdit.ts.
+  pricePerUnitSnapshot?: number | null;
+  lineCostSnapshot?: number | null;
 }
 
+interface CurrentVersionData {
+  hasRecipe: boolean;
+  versionNumber?: number;
+  yieldQuantity?: number;
+  lines?: RecipeLineData[];
+  totalCostSnapshot?: number | null;
+  costPerUnitSnapshot?: number | null;
+}
+
+/**
+ * עורך מתכון — נטען דרך getRecipeVersionForEdit (לא onSnapshot ישיר
+ * על recipeVersions, שחסום ב-Rules למי שאינו owner) כדי שגם מנהל/ת
+ * משמרת יוכל/תוכל לערוך מתכון בלי להיחשף לעלויות (שלוש רמות הרשאה,
+ * ראו CLAUDE.md). נוכחות totalCostSnapshot בתשובה היא הסימן היחיד
+ * שצריך לתצוגת עלות — אם השרת לא שלח אותו (shiftManager), לא
+ * מציגים שום מספר.
+ */
 export function RecipeEditorDialog({ product, ingredients, onClose }: Props) {
-  const [versions, setVersions] = useState<RecipeVersion[]>([]);
-  const [lines, setLines] = useState<LineDraft[]>([
-    { ingredientId: ingredients[0]?.id ?? "", quantity: "" },
-  ]);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const online = useOnlineStatus();
+  const [current, setCurrent] = useState<CurrentVersionData | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  useEffect(() => {
-    const businessId = getBusinessId();
-    const versionsQuery = query(
-      collection(
-        db,
-        "businesses",
-        businessId,
-        "products",
-        product.id,
-        "recipeVersions",
-      ),
-      orderBy("versionNumber", "desc"),
-    );
-    return onSnapshot(versionsQuery, (snap) => {
-      setVersions(
-        snap.docs.map((d) => ({
-          id: d.id,
-          versionNumber: d.data().versionNumber,
-          ingredients: d.data().ingredients,
-          totalCostSnapshot: d.data().totalCostSnapshot,
-        })),
-      );
-    });
-  }, [product.id]);
-
-  const currentVersion = versions.find((v) => v.id === product.currentRecipeVersionId);
-
-  function updateLine(index: number, patch: Partial<LineDraft>) {
-    setLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)));
-  }
-
-  function addLine() {
-    setLines((prev) => [...prev, { ingredientId: ingredients[0]?.id ?? "", quantity: "" }]);
-  }
-
-  function removeLine(index: number) {
-    setLines((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const parsedLines = lines
-      .filter((l) => l.ingredientId)
-      .map((l) => ({ ingredientId: l.ingredientId, quantity: Number(l.quantity) }));
-
-    if (parsedLines.length === 0 || parsedLines.some((l) => !(l.quantity > 0))) {
-      setError("יש להוסיף לפחות שורה אחת עם כמות חיובית");
-      return;
-    }
-
-    setBusy(true);
-    setError(null);
+  const loadCurrentVersion = useCallback(async () => {
     try {
-      const createRecipeVersion = httpsCallable(functions, "createRecipeVersion");
-      await createRecipeVersion({
+      const getRecipeVersionForEdit = httpsCallable<
+        { businessId: string; productId: string },
+        CurrentVersionData
+      >(functions, "getRecipeVersionForEdit");
+      const { data } = await getRecipeVersionForEdit({
         businessId: getBusinessId(),
         productId: product.id,
-        lines: parsedLines,
       });
-      setLines([{ ingredientId: ingredients[0]?.id ?? "", quantity: "" }]);
-    } catch {
-      setError("יצירת גרסת המתכון נכשלה — נסה/י שוב");
-    } finally {
-      setBusy(false);
+      setCurrent(data);
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(describeError(err));
     }
-  }
+  }, [product.id]);
+
+  useEffect(() => {
+    loadCurrentVersion();
+    // reloadKey בכוונה בתלויות: מכריח רענון אחרי שמירה מוצלחת, גם
+    // אם product.id לא השתנה.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadCurrentVersion, reloadKey]);
+
+  const hasCostData = current?.totalCostSnapshot !== undefined;
+
+  // הגרסה החדשה מאותחלת מתוך הגרסה הנוכחית (לא ריקה) — כך "הסרת שורה"
+  // ותיקון כמות הופכים שימושיים בפועל, במקום לדרוש הקלדה מחדש של כל
+  // המתכון בכל פעם. ה-key למטה מכריח רימאונט (ולכן אתחול מחדש) בכל
+  // פעם שהגרסה הנוכחית משתנה — למשל מיד אחרי שמירה מוצלחת (אחרי
+  // הרענון מ-reloadKey).
+  const initialLines: LineDraft[] | undefined = current?.hasRecipe
+    ? current.lines?.map((line) => ({
+        ingredientId: line.ingredientId,
+        quantity: String(line.quantity),
+      }))
+    : undefined;
+  const initialYield = current?.hasRecipe ? String(current.yieldQuantity) : undefined;
 
   return (
     <div className="dialog-backdrop" dir="rtl">
       <div className="dialog">
         <h2>מתכון: {product.name}</h2>
 
-        {currentVersion ? (
+        {loadError && <p className="error-text">{loadError}</p>}
+
+        {!current && !loadError && (
+          <p>
+            <Spinner /> טוען...
+          </p>
+        )}
+
+        {current?.hasRecipe && (
           <div>
             <p>
-              גרסה נוכחית: {currentVersion.versionNumber} — עלות כוללת:{" "}
-              {currentVersion.totalCostSnapshot.toFixed(2)}
+              גרסה נוכחית: {current.versionNumber}
+              {hasCostData && (
+                <>
+                  {" "}
+                  — עלות כוללת להכנה אחת:{" "}
+                  {current.totalCostSnapshot === null
+                    ? "לא ידועה (מרכיב ממתין למחיר)"
+                    : current.totalCostSnapshot!.toFixed(2)}{" "}
+                  · עלות ל-{product.unit} בודד/ת:{" "}
+                  {current.costPerUnitSnapshot === null
+                    ? "—"
+                    : current.costPerUnitSnapshot!.toFixed(2)}
+                </>
+              )}
             </p>
             <ul>
-              {currentVersion.ingredients.map((line) => (
+              {current.lines?.map((line) => (
                 <li key={line.ingredientId}>
-                  {line.ingredientNameSnapshot}: {line.quantity} {line.unit} ×{" "}
-                  {line.pricePerUnitSnapshot} = {line.lineCostSnapshot.toFixed(2)}
+                  {line.ingredientNameSnapshot}: {line.quantity} {line.unit}
+                  {hasCostData && (
+                    <>
+                      {" "}
+                      ×{" "}
+                      {line.pricePerUnitSnapshot === null
+                        ? "ממתין למחיר"
+                        : line.pricePerUnitSnapshot}
+                      {line.lineCostSnapshot !== null && line.lineCostSnapshot !== undefined
+                        ? ` = ${line.lineCostSnapshot.toFixed(2)}`
+                        : ""}
+                    </>
+                  )}
                 </li>
               ))}
             </ul>
           </div>
-        ) : (
-          <p>אין עדיין מתכון למוצר זה</p>
         )}
 
-        <h3>גרסה חדשה</h3>
-        <form onSubmit={handleSubmit}>
-          {lines.map((line, index) => (
-            <div key={index} className="recipe-line">
-              <select
-                value={line.ingredientId}
-                onChange={(e) => updateLine(index, { ingredientId: e.target.value })}
-              >
-                {ingredients.map((ing) => (
-                  <option key={ing.id} value={ing.id}>
-                    {ing.name} ({ing.unit})
-                  </option>
-                ))}
-              </select>
-              <input
-                type="number"
-                min="0"
-                step="any"
-                placeholder="כמות"
-                value={line.quantity}
-                onChange={(e) => updateLine(index, { quantity: e.target.value })}
-              />
-              {lines.length > 1 && (
-                <button type="button" onClick={() => removeLine(index)}>
-                  הסר
-                </button>
-              )}
-            </div>
-          ))}
-          <button type="button" onClick={addLine} disabled={ingredients.length === 0}>
-            הוספת שורה
-          </button>
+        {current && !current.hasRecipe && (
+          <p className="warning-text">
+            אין עדיין מתכון למוצר זה
+            {hasCostData
+              ? " — עד שתוגדר גרסת מתכון, שווי הפחת שלו לא יחושב בדוח הפחת ורווחיות (אין עלות ידועה לייחס אליה)."
+              : "."}
+          </p>
+        )}
 
-          {ingredients.length === 0 && <p>יש ליצור מרכיבים לפני יצירת מתכון</p>}
-          {!online && <p className="error-text">אין חיבור לאינטרנט — לא ניתן לשמור כרגע</p>}
-          {error && <p className="error-text">{error}</p>}
-
-          <div className="dialog-actions">
-            <button type="submit" disabled={busy || !online || ingredients.length === 0}>
-              {busy && <Spinner />} שמירת גרסה חדשה
-            </button>
-            <button type="button" onClick={onClose}>
-              סגירה
-            </button>
-          </div>
-        </form>
+        {current && (
+          <>
+            <h3>{current.hasRecipe ? "עדכון המתכון" : "יצירת מתכון"}</h3>
+            {message && <p className="warning-text">{message}</p>}
+            <RecipeLinesEditor
+              key={current.hasRecipe ? String(current.versionNumber) : "new"}
+              productId={product.id}
+              productUnit={product.unit}
+              ingredients={ingredients}
+              initialLines={initialLines}
+              initialYield={initialYield}
+              submitLabel="שמירת גרסה חדשה"
+              secondaryActionLabel="סגירה"
+              onSecondaryAction={onClose}
+              onSaved={(result) => {
+                setMessage(
+                  result.unchanged
+                    ? "אין שינוי מהגרסה הנוכחית — לא נוצרה גרסה חדשה"
+                    : `גרסה ${result.versionNumber} נשמרה בהצלחה`,
+                );
+                setReloadKey((k) => k + 1);
+              }}
+            />
+          </>
+        )}
       </div>
     </div>
   );

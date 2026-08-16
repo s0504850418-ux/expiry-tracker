@@ -48,8 +48,15 @@ export const functions: Functions = getFunctions(app);
 // חיבור ל-Firebase Emulator Suite המקומי לפיתוח/בדיקות בלבד — ראו
 // README, "בדיקות מול Firebase Emulator". בפרודקשן VITE_USE_EMULATORS
 // לא מוגדר (או "false") והאפליקציה מתחברת לפרויקט Firebase האמיתי.
+//
+// חשוב: host נלקח מ-window.location.hostname ולא מ-"127.0.0.1" קבוע —
+// כשבודקים מטאבלט אמיתי ברשת המקומית (לא מאותו מחשב), "127.0.0.1"
+// מתוך הדפדפן של הטאבלט מצביע *על הטאבלט עצמו*, לא על המחשב שמריץ את
+// האמולטור. שימוש ב-hostname שממנו נטען הדף (localhost בפיתוח על אותו
+// מחשב, כתובת ה-IP ברשת כשנטען ממכשיר אחר) עובד נכון בשני המקרים.
 if (import.meta.env.VITE_USE_EMULATORS === "true") {
-  connectFirestoreEmulator(db, "127.0.0.1", 8080);
-  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
-  connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+  const emulatorHost = window.location.hostname;
+  connectFirestoreEmulator(db, emulatorHost, 8080);
+  connectAuthEmulator(auth, `http://${emulatorHost}:9099`, { disableWarnings: true });
+  connectFunctionsEmulator(functions, emulatorHost, 5001);
 }
