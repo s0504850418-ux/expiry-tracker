@@ -61,7 +61,18 @@ export function RecipeLinesEditor({
   const [lineErrors, setLineErrors] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState(false);
   const [showAddIngredient, setShowAddIngredient] = useState(false);
+  // מרכיבים שנוצרו דרך "מרכיב חדש" בתוך העורך הזה, במהלך העריכה הנוכחית
+  // — הרכיב ההורה (ProductsManagement) לא טוען את רשימת המרכיבים שלו
+  // מחדש בכל יצירה כזו, אז בלי הרשימה המקומית הזו ה-<select> של השורה
+  // שאמורה "להיבחר אוטומטית" (ראו handleIngredientCreated) לא היה מוצא
+  // <option> תואם לערך שכבר נשמר ב-state, ומציג ריק במקום את המרכיב.
+  const [locallyCreatedIngredients, setLocallyCreatedIngredients] = useState<Ingredient[]>([]);
   const online = useOnlineStatus();
+
+  const allIngredients =
+    locallyCreatedIngredients.length === 0
+      ? ingredients
+      : [...ingredients, ...locallyCreatedIngredients.filter((li) => !ingredients.some((i) => i.id === li.id))];
 
   function updateLine(index: number, patch: Partial<LineDraft>) {
     setLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)));
@@ -78,17 +89,16 @@ export function RecipeLinesEditor({
   // אחרי יצירת מרכיב חדש דרך הכפתור בתוך העורך הזה: אם יש שורה ריקה
   // (בלי מרכיב נבחר), ממלאים אותה עם המרכיב החדש; אחרת מוסיפים שורה
   // חדשה שכבר בוחרת אותו — כדי שלא צריך יהיה לחפש אותו ברשימה בנפרד.
-  function handleIngredientCreated(createdIngredientId?: string) {
+  function handleIngredientCreated(created?: { id: string; name: string; unit: string }) {
     setShowAddIngredient(false);
-    if (!createdIngredientId) return;
+    if (!created) return;
+    setLocallyCreatedIngredients((prev) => [...prev, { ...created, active: true }]);
     setLines((prev) => {
       const emptyIndex = prev.findIndex((l) => !l.ingredientId);
       if (emptyIndex !== -1) {
-        return prev.map((l, i) =>
-          i === emptyIndex ? { ...l, ingredientId: createdIngredientId } : l,
-        );
+        return prev.map((l, i) => (i === emptyIndex ? { ...l, ingredientId: created.id } : l));
       }
-      return [...prev, { ingredientId: createdIngredientId, quantity: "" }];
+      return [...prev, { ingredientId: created.id, quantity: "" }];
     });
   }
 
@@ -196,7 +206,7 @@ export function RecipeLinesEditor({
                 onChange={(e) => updateLine(index, { ingredientId: e.target.value })}
               >
                 <option value="">בחר/י מרכיב...</option>
-                {ingredients
+                {allIngredients
                   .filter((ing) => !excluded.has(ing.id))
                   .map((ing) => (
                     <option key={ing.id} value={ing.id}>
@@ -206,7 +216,7 @@ export function RecipeLinesEditor({
               </select>
             </div>
             <div className="recipe-line-field quantity">
-              <label htmlFor={`recipe-line-quantity-${index}`}>כמות ({line.ingredientId ? ingredients.find((i) => i.id === line.ingredientId)?.unit : "יחידת המרכיב"})</label>
+              <label htmlFor={`recipe-line-quantity-${index}`}>כמות ({line.ingredientId ? allIngredients.find((i) => i.id === line.ingredientId)?.unit : "יחידת המרכיב"})</label>
               <input
                 id={`recipe-line-quantity-${index}`}
                 type="number"
@@ -225,14 +235,14 @@ export function RecipeLinesEditor({
           </div>
         );
       })}
-      <button type="button" onClick={addLine} disabled={ingredients.length === 0}>
+      <button type="button" onClick={addLine} disabled={allIngredients.length === 0}>
         הוספת שורה
       </button>
       <button type="button" onClick={() => setShowAddIngredient(true)}>
         מרכיב חדש
       </button>
 
-      {ingredients.length === 0 && (
+      {allIngredients.length === 0 && (
         <p className="warning-text">
           אין עדיין מרכיבים רשומים בעסק — לחצ/י על "מרכיב חדש" כדי ליצור אחד
           ולהמשיך ישירות מכאן.
@@ -242,7 +252,7 @@ export function RecipeLinesEditor({
       {error && <p className="error-text">{error}</p>}
 
       <div className="dialog-actions">
-        <button type="submit" disabled={busy || !online || ingredients.length === 0}>
+        <button type="submit" disabled={busy || !online || allIngredients.length === 0}>
           {busy && <Spinner />} {submitLabel}
         </button>
         <button type="button" onClick={onSecondaryAction}>

@@ -34,7 +34,11 @@ export const verifyStaffPin = onCall(async (request) => {
   const staffSnap = await getFirestore()
     .doc(`businesses/${businessId}/staff/${staffId}`)
     .get();
-  if (!staffSnap.exists || staffSnap.data()?.active !== true) {
+  if (
+    !staffSnap.exists ||
+    staffSnap.data()?.active !== true ||
+    staffSnap.data()?.isShiftManager !== true
+  ) {
     throw new HttpsError("not-found", "עובד/ת לא נמצא/ה או לא פעיל/ה");
   }
 

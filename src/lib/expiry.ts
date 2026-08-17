@@ -17,3 +17,12 @@ export function formatTimeRemaining(expiresAt: Date, now: Date = new Date()): st
   const diffDays = Math.round(diffHours / 24);
   return `${diffDays} ימים`;
 }
+
+export function formatExpiryDateTime(date: Date): string {
+  return date.toLocaleString("he-IL", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}

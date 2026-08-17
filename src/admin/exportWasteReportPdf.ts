@@ -1,4 +1,5 @@
 import type { EmployeeBreakdown, ReportBatch } from "./WasteReport";
+import { formatCurrency } from "../lib/currency";
 
 const PRINT_ROOT_ID = "print-label-root";
 
@@ -54,7 +55,7 @@ export function exportWasteReportPdf({ startDate, endDate, batches, summary }: P
   container.appendChild(
     el(
       "p",
-      `שווי כולל: ${summary.totalCost.toFixed(2)} · שווי פחת: ${summary.wasteCost.toFixed(2)}` +
+      `שווי כולל: ${formatCurrency(summary.totalCost)} · שווי פחת: ${formatCurrency(summary.wasteCost)}` +
         (summary.totalCost > 0
           ? ` (${((summary.wasteCost / summary.totalCost) * 100).toFixed(1)}%)`
           : ""),
@@ -79,7 +80,7 @@ export function exportWasteReportPdf({ startDate, endDate, batches, summary }: P
       const row = el("tr");
       row.appendChild(el("td", p.productName));
       row.appendChild(el("td", String(p.wasteBatchCount)));
-      row.appendChild(el("td", p.wasteCost.toFixed(2)));
+      row.appendChild(el("td", formatCurrency(p.wasteCost)));
       tbody.appendChild(row);
     }
     table.appendChild(tbody);
@@ -105,11 +106,13 @@ export function exportWasteReportPdf({ startDate, endDate, batches, summary }: P
       const row = el("tr");
       row.appendChild(el("td", emp.employeeName));
       row.appendChild(el("td", String(emp.wasteBatchCount)));
-      row.appendChild(el("td", emp.wasteCost.toFixed(2)));
+      row.appendChild(el("td", formatCurrency(emp.wasteCost)));
       row.appendChild(
         el(
           "td",
-          emp.byReason.map((r) => `${r.reason}: ${r.wasteBatchCount} (${r.wasteCost.toFixed(2)})`).join(" · "),
+          emp.byReason
+            .map((r) => `${r.reason}: ${r.wasteBatchCount} (${formatCurrency(r.wasteCost)})`)
+            .join(" · "),
         ),
       );
       tbody.appendChild(row);
@@ -134,7 +137,7 @@ export function exportWasteReportPdf({ startDate, endDate, batches, summary }: P
     row.appendChild(el("td", `${b.quantity} ${b.unit}`));
     row.appendChild(el("td", STATUS_LABEL[b.status] ?? b.status));
     row.appendChild(el("td", b.discardReason ?? ""));
-    row.appendChild(el("td", b.costSnapshot === null ? "—" : b.costSnapshot.toFixed(2)));
+    row.appendChild(el("td", formatCurrency(b.costSnapshot)));
     fullTbody.appendChild(row);
   }
   fullTable.appendChild(fullTbody);

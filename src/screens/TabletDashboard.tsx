@@ -23,7 +23,8 @@ import { needsDailyQuantityUpdate } from "../lib/quantityReminder";
 import { describeError } from "../lib/describeError";
 import { TeamManagement } from "../admin/TeamManagement";
 import { ProductsManagement } from "../admin/ProductsManagement";
-import { LoginScreen } from "./LoginScreen";
+import { StaffLoginDialog } from "./StaffLoginDialog";
+import { OwnerLoginDialog } from "./OwnerLoginDialog";
 
 const ROLE_LABEL: Record<string, string> = {
   owner: "בעל/ת העסק",
@@ -36,9 +37,8 @@ function toDate(value: Timestamp | Date | undefined): Date {
   return value instanceof Timestamp ? value.toDate() : value;
 }
 
-const STATUS_TOAST_LABEL: Record<"used" | "expired" | "discarded", string> = {
-  used: "הסטטוס עודכן ל'נוצל'",
-  expired: "הסטטוס עודכן ל'פג תוקף'",
+const STATUS_TOAST_LABEL: Record<"used" | "discarded", string> = {
+  used: "הסטטוס עודכן ל'נוצל במלואו'",
   discarded: "האצווה סומנה כהושלכה",
 };
 
@@ -58,7 +58,8 @@ export function TabletDashboard() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [showTeamManagement, setShowTeamManagement] = useState(false);
   const [showProductsManagement, setShowProductsManagement] = useState(false);
-  const [showLoginDialog, setShowLoginDialog] = useState(false);
+  const [showStaffLogin, setShowStaffLogin] = useState(false);
+  const [showOwnerLogin, setShowOwnerLogin] = useState(false);
   const online = useOnlineStatus();
 
   function flashToast(message: string) {
@@ -72,7 +73,8 @@ export function TabletDashboard() {
   const prevRoleRef = useRef(claims?.role);
   useEffect(() => {
     if (prevRoleRef.current === "worker" && claims?.role && claims.role !== "worker") {
-      setShowLoginDialog(false);
+      setShowStaffLogin(false);
+      setShowOwnerLogin(false);
     }
     prevRoleRef.current = claims?.role;
   }, [claims?.role]);
@@ -139,7 +141,9 @@ export function TabletDashboard() {
 
   async function updateStatus(
     batchId: string,
-    newStatus: "used" | "expired" | "discarded",
+    // הקליינט כבר לא שולח "expired" (ראו BatchRow.tsx) — הסטטוס עדיין
+    // נתמך ב-updateBatchStatus בשרת, לא נגענו שם.
+    newStatus: "used" | "discarded",
     extra?: { quantity?: number; discardReason?: string },
   ) {
     setBusyBatchId(batchId);
@@ -149,7 +153,7 @@ export function TabletDashboard() {
         {
           businessId: string;
           batchId: string;
-          newStatus: "used" | "expired" | "discarded";
+          newStatus: "used" | "discarded";
           quantity?: number;
           discardReason?: string;
         },
@@ -200,9 +204,14 @@ export function TabletDashboard() {
             </button>
           )}
           {claims?.role === "worker" && (
-            <button type="button" onClick={() => setShowLoginDialog(true)}>
-              כניסה כמנהל/ת משמרת / בעל/ת העסק
-            </button>
+            <>
+              <button type="button" onClick={() => setShowStaffLogin(true)}>
+                כניסה כמנהל/ת משמרת
+              </button>
+              <button type="button" onClick={() => setShowOwnerLogin(true)}>
+                כניסה כבעל/ת העסק
+              </button>
+            </>
           )}
           {(claims?.role === "shiftManager" || claims?.role === "owner") && (
             <button type="button" onClick={() => signOut()}>
@@ -212,7 +221,16 @@ export function TabletDashboard() {
         </div>
       </header>
 
-      {showLoginDialog && <LoginScreen onClose={() => setShowLoginDialog(false)} />}
+      {showStaffLogin && (
+        <StaffLoginDialog
+          onClose={() => setShowStaffLogin(false)}
+          onSwitchToOwnerLogin={() => {
+            setShowStaffLogin(false);
+            setShowOwnerLogin(true);
+          }}
+        />
+      )}
+      {showOwnerLogin && <OwnerLoginDialog onClose={() => setShowOwnerLogin(false)} />}
 
       {showTeamManagement && (
         <div className="dialog-backdrop" dir="rtl">
@@ -312,17 +330,6 @@ export function TabletDashboard() {
               onMarkUsed={() =>
                 updateStatus(batch.id, "used")
                   .then(() => flashToast(STATUS_TOAST_LABEL.used))
-                  .catch((err) =>
-                    setActionError(
-                      describeError(err, {
-                        "failed-precondition": "האצווה כבר טופלה — רענן/י את הרשימה",
-                      }),
-                    ),
-                  )
-              }
-              onMarkExpired={() =>
-                updateStatus(batch.id, "expired")
-                  .then(() => flashToast(STATUS_TOAST_LABEL.expired))
                   .catch((err) =>
                     setActionError(
                       describeError(err, {

@@ -58,6 +58,9 @@ ownerEmails: string[]    // כתובות Gmail מורשות לכניסה למס�
 ```
 name: string
 active: boolean
+isShiftManager: boolean  // נוסף בשלב 15. false = עובד/ת רגיל/ה (בלי PIN,
+                          // לא יכול/ה להתחבר כמנהל/ת משמרת — רק להופיע
+                          // ברשימת "מי הכין"). true = יש staffSecrets תואם.
 createdAt: Timestamp
 createdByUid: string
 ```
@@ -138,7 +141,7 @@ preparedAtServer: Timestamp       // זמן קבלה בשרת — לזיהוי �
 preparedByStaffId: string | null  // מי הכין בפועל — לתיעוד/דוח פחת-לפי-עובד בלבד, לא אימות. null = הוכן ע"י בעל/ת העסק. לא קשור ל-createdByStaffId למטה (זהות ה-session המחובר)
 preparedByNameSnapshot: string    // snapshot של שם המכין/ה, עקבי עם productNameSnapshot
 expiresAt: Timestamp              // מחושב מ-preparedAtClient + shelfLifeMinutes (לא מ-preparedAtServer, כדי שניתוק זמני לא יעוות את התאריך האמיתי)
-status: 'active' | 'used' | 'expired' | 'discarded' | 'archived'
+status: 'active' | 'used' | 'expired' | 'discarded' | 'archived'  // 'expired' עדיין נתמך ב-updateBatchStatus בשרת, אבל מאז שלב 15 אין כפתור ייעודי אליו בטאבלט — "פג תוקף" מתבצע כ"הושלך" + discardReason="פג תוקף"
 discardReason: string | null      // חובה כשסטטוס = discarded; מרשימה סגורה וקבועה מראש (ראו functions/src/lib/discardReasons.ts), לא טקסט חופשי
 printStatus: 'pending' | 'printed' | 'failed'
 createdByRole: 'owner' | 'shiftManager'

@@ -175,6 +175,7 @@ async function main(): Promise<void> {
     {
       name: STAFF_NAME,
       active: true,
+      isShiftManager: true,
       createdAt: FieldValue.serverTimestamp(),
     },
     { merge: true },

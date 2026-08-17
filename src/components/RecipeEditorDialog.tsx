@@ -6,6 +6,7 @@ import type { Ingredient, Product } from "../lib/types";
 import { RecipeLinesEditor } from "./RecipeLinesEditor";
 import type { LineDraft } from "./RecipeLinesEditor";
 import { describeError } from "../lib/describeError";
+import { formatCurrency } from "../lib/currency";
 import { Spinner } from "./Spinner";
 
 interface Props {
@@ -110,11 +111,9 @@ export function RecipeEditorDialog({ product, ingredients, onClose }: Props) {
                   — עלות כוללת להכנה אחת:{" "}
                   {current.totalCostSnapshot === null
                     ? "לא ידועה (מרכיב ממתין למחיר)"
-                    : current.totalCostSnapshot!.toFixed(2)}{" "}
+                    : formatCurrency(current.totalCostSnapshot)}{" "}
                   · עלות ל-{product.unit} בודד/ת:{" "}
-                  {current.costPerUnitSnapshot === null
-                    ? "—"
-                    : current.costPerUnitSnapshot!.toFixed(2)}
+                  {formatCurrency(current.costPerUnitSnapshot)}
                 </>
               )}
             </p>
@@ -128,9 +127,9 @@ export function RecipeEditorDialog({ product, ingredients, onClose }: Props) {
                       ×{" "}
                       {line.pricePerUnitSnapshot === null
                         ? "ממתין למחיר"
-                        : line.pricePerUnitSnapshot}
+                        : formatCurrency(line.pricePerUnitSnapshot)}
                       {line.lineCostSnapshot !== null && line.lineCostSnapshot !== undefined
-                        ? ` = ${line.lineCostSnapshot.toFixed(2)}`
+                        ? ` = ${formatCurrency(line.lineCostSnapshot)}`
                         : ""}
                     </>
                   )}

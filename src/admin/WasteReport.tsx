@@ -14,6 +14,7 @@ import { db } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
 import { exportWasteReportPdf } from "./exportWasteReportPdf";
 import { describeError } from "../lib/describeError";
+import { formatCurrency } from "../lib/currency";
 import { Spinner } from "../components/Spinner";
 
 type BatchStatus = "active" | "used" | "expired" | "discarded" | "archived";
@@ -223,8 +224,8 @@ export function WasteReport() {
         <div>
           <p>
             סה"כ אצוות בטווח: {batches.length} · שווי כולל שיוצר:{" "}
-            {summary.totalCost.toFixed(2)} · שווי פחת (פג תוקף + הושלך):{" "}
-            <strong>{summary.wasteCost.toFixed(2)}</strong>{" "}
+            {formatCurrency(summary.totalCost)} · שווי פחת (פג תוקף + הושלך):{" "}
+            <strong>{formatCurrency(summary.wasteCost)}</strong>{" "}
             {summary.totalCost > 0 &&
               `(${((summary.wasteCost / summary.totalCost) * 100).toFixed(1)}% מהשווי הכולל)`}
           </p>
@@ -243,7 +244,7 @@ export function WasteReport() {
               {summary.byProduct.map((p) => (
                 <li key={p.productName}>
                   {p.productName}: {p.wasteBatchCount} אצוות, שווי{" "}
-                  {p.wasteCost.toFixed(2)}
+                  {formatCurrency(p.wasteCost)}
                 </li>
               ))}
             </ul>
@@ -271,11 +272,11 @@ export function WasteReport() {
                   {summary.byEmployee.map((emp) => (
                     <tr key={emp.employeeName}>
                       <td>{emp.employeeName}</td>
-                      <td>{emp.wasteCost.toFixed(2)}</td>
+                      <td>{formatCurrency(emp.wasteCost)}</td>
                       <td>{emp.wasteBatchCount}</td>
                       <td>
                         {emp.byReason
-                          .map((r) => `${r.reason}: ${r.wasteBatchCount} (${r.wasteCost.toFixed(2)})`)
+                          .map((r) => `${r.reason}: ${r.wasteBatchCount} (${formatCurrency(r.wasteCost)})`)
                           .join(" · ")}
                       </td>
                     </tr>

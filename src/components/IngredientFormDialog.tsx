@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase/config";
 import { getBusinessId } from "../lib/businessId";
@@ -11,10 +12,12 @@ import { Spinner } from "./Spinner";
 interface Props {
   ingredient: Ingredient | null; // null = יצירה חדשה, אחרת = עדכון מחיר בלבד (owner בלבד מגיע/ה לכאן)
   onClose: () => void;
-  // בעת יצירת מרכיב חדש (ingredient === null), מקבל גם את ה-ingredientId
-  // שנוצר — כדי שעורך המתכון (RecipeEditorDialog) יוכל לבחור אותו
-  // מיד בשורה החדשה, בלי שהמשתמש/ת יצטרך/תצטרך לחפש אותו ברשימה.
-  onSaved: (createdIngredientId?: string) => void;
+  // בעת יצירת מרכיב חדש (ingredient === null), מקבל גם את פרטי המרכיב
+  // שנוצר (לא רק ה-id) — כדי שעורך המתכון (RecipeLinesEditor) יוכל
+  // להוסיף אותו מיד לרשימת האפשרויות המקומית שלו ולבחור אותו בשורה,
+  // בלי לחכות שהרכיב ההורה (ProductsManagement) יטען מחדש את כל
+  // רשימת המרכיבים מהשרת ברקע.
+  onSaved: (created?: { id: string; name: string; unit: string }) => void;
 }
 
 export function IngredientFormDialog({ ingredient, onClose, onSaved }: Props) {
@@ -38,6 +41,14 @@ export function IngredientFormDialog({ ingredient, onClose, onSaved }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // גם עם ה-Portal (למטה): React מבעבע אירועים דרך עץ ה-React
+    // ה"לוגי" (איפה שהרכיב מוצג ב-JSX), לא דרך עץ ה-DOM בפועל —
+    // בלי stopPropagation כאן, ה-onSubmit של ה-<form> החיצוני
+    // (RecipeLinesEditor) עדיין ירוץ בעקבות ה-click הזה, וישמור
+    // גרסת מתכון מוקדם מדי/חלקית. ה-Portal לבד פותר רק את הבעיה
+    // ברמת ה-DOM (הדפדפן מנווט מחדש כשיש <form> מקונן פיזית) —
+    // שתי הבעיות שונות, שני התיקונים נדרשים יחד.
+    e.stopPropagation();
     if (!ingredient && !name.trim()) {
       setError("יש להזין שם");
       return;
@@ -72,7 +83,7 @@ export function IngredientFormDialog({ ingredient, onClose, onSaved }: Props) {
           unit,
           ...(priceNumber !== undefined ? { pricePerUnit: priceNumber } : {}),
         });
-        onSaved(data.ingredientId);
+        onSaved({ id: data.ingredientId, name: name.trim(), unit });
       }
     } catch (err) {
       setError(describeError(err));
@@ -81,7 +92,23 @@ export function IngredientFormDialog({ ingredient, onClose, onSaved }: Props) {
     }
   }
 
-  return (
+  // הדיאלוג הזה יכול להיפתח מקונן בתוך <form> אחר (RecipeLinesEditor,
+  // זרימת "מרכיב חדש" מתוך עורך המתכון/אשף מוצר חדש) — <form> בתוך
+  // <form> הוא HTML לא תקין. ניסינו בהתחלה רק e.stopPropagation()
+  // (עדיין נדרש, ראו handleSubmit למעלה) כדי למנוע מה-onSubmit של
+  // ה-form החיצוני לרוץ, אבל בדיקה אמיתית בדפדפן (Playwright, לא רק
+  // קריאת קוד) גילתה שזה לא מספיק לבד: הדפדפן עצמו (לא React) עדיין
+  // ביצע הגשה (submit) מקורית של ה-<form> המקונן פיזית ב-DOM וניווט
+  // מחדש לעמוד (איפוס מלא של המצב, כולל כל מה שלא נשמר) — תוצר לוואי
+  // של מבנה DOM לא תקני שהדפדפן לא מתמודד איתו כמצופה, בלי קשר בכלל
+  // ל-e.preventDefault()/stopPropagation() ברמת React. הפתרון לבעיה
+  // הזו: להוציא את ה-DOM של הדיאלוג הזה physically מחוץ ל-<form>
+  // החיצוני באמצעות Portal (מוצג עדיין ויזואלית באותו מקום,
+  // dialog-backdrop מכסה הכל). שני התיקונים נדרשים יחד — ה-Portal
+  // פותר את בעיית ה-DOM/ניווט, ה-stopPropagation פותר בנפרד את
+  // בעיית ה-bubbling הלוגי של React (שממשיך לעבוד גם דרך Portal, כי
+  // React מבעבע אירועים לפי מבנה ה-JSX ולא לפי מבנה ה-DOM בפועל).
+  return createPortal(
     <div className="dialog-backdrop" dir="rtl">
       <form onSubmit={handleSubmit} className="dialog">
         <h2>{ingredient ? `עדכון מחיר: ${ingredient.name}` : "מרכיב חדש"}</h2>
@@ -117,7 +144,7 @@ export function IngredientFormDialog({ ingredient, onClose, onSaved }: Props) {
         {showPriceField && (
           <>
             <label htmlFor="ingredient-price">
-              מחיר ל-{ingredient?.unit ?? unit} אחד/ת
+              מחיר ל-{ingredient?.unit ?? unit} אחד/ת (₪)
             </label>
             <input
               id="ingredient-price"
@@ -143,6 +170,7 @@ export function IngredientFormDialog({ ingredient, onClose, onSaved }: Props) {
           </button>
         </div>
       </form>
-    </div>
+    </div>,
+    document.body,
   );
 }

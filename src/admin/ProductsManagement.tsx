@@ -10,6 +10,7 @@ import { IngredientFormDialog } from "../components/IngredientFormDialog";
 import { RecipeEditorDialog } from "../components/RecipeEditorDialog";
 import { NewProductWizard } from "../components/NewProductWizard";
 import { describeError } from "../lib/describeError";
+import { formatCurrency } from "../lib/currency";
 
 type Tab = "products" | "ingredients";
 
@@ -193,7 +194,7 @@ export function ProductsManagement({ focusIngredients }: Props) {
                           ing.currentPricePerUnit === null ? (
                             <span className="reminder-badge">ממתין למחיר</span>
                           ) : (
-                            `${ing.currentPricePerUnit} ל-${ing.unit}`
+                            `${formatCurrency(ing.currentPricePerUnit)} ל-${ing.unit}`
                           )
                         ) : ing.priceStatus === "pending" ? (
                           <span className="reminder-badge">ממתין למחיר</span>

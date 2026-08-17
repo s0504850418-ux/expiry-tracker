@@ -1,21 +1,23 @@
 import { useState } from "react";
-import { urgencyLevel, formatTimeRemaining } from "../lib/expiry";
+import { urgencyLevel, formatTimeRemaining, formatExpiryDateTime } from "../lib/expiry";
 import { printBatchLabel } from "../printing/printBatchLabel";
 import type { Batch } from "../lib/types";
 import { describeError } from "../lib/describeError";
 import { Spinner } from "./Spinner";
 
+// סטטוס "expired" עדיין קיים בסכמה/בשרת (updateBatchStatus ממשיך לתמוך
+// בו), אבל אין יותר כפתור ייעודי אליו כאן — "פג תוקף" מסומן דרך
+// "הושלך" + סיבת הפחת "פג תוקף" (כבר ברשימה הסגורה), לא כפעולה נפרדת.
 const URGENCY_BADGE_LABEL: Record<ReturnType<typeof urgencyLevel>, string> = {
   expired: "פג תוקף",
   urgent: "דחוף",
   soon: "בקרוב",
-  ok: "תקין",
+  ok: "תוקף תקין",
 };
 
 interface Props {
   batch: Batch;
   onMarkUsed: () => void;
-  onMarkExpired: () => void;
   onMarkDiscarded: () => void;
   onUpdateQuantity: (quantity: number) => Promise<void>;
   busy: boolean;
@@ -26,7 +28,6 @@ interface Props {
 export function BatchRow({
   batch,
   onMarkUsed,
-  onMarkExpired,
   onMarkDiscarded,
   onUpdateQuantity,
   busy,
@@ -82,8 +83,20 @@ export function BatchRow({
         {needsQuantityUpdateReminder && !editingQuantity && (
           <span className="reminder-badge">יש לעדכן כמות היום</span>
         )}
+        {!editingQuantity && (
+          <button
+            type="button"
+            className={`batch-info-action${needsQuantityUpdateReminder ? " urgent-action" : ""}`}
+            onClick={startEditingQuantity}
+            disabled={disabled}
+          >
+            עדכון כמות
+          </button>
+        )}
         <strong>{batch.productNameSnapshot}</strong>
-        <span>{formatTimeRemaining(batch.expiresAt)}</span>
+        <span>
+          {formatExpiryDateTime(batch.expiresAt)} · {formatTimeRemaining(batch.expiresAt)}
+        </span>
         {batch.printStatus === "failed" && !printing && (
           <span className="error-text">ההדפסה נכשלה</span>
         )}
@@ -124,19 +137,8 @@ export function BatchRow({
                 ? "נסה שוב להדפיס"
                 : "הדפסה חוזרת"}
           </button>
-          <button
-            type="button"
-            onClick={startEditingQuantity}
-            disabled={disabled}
-            className={needsQuantityUpdateReminder ? "urgent-action" : undefined}
-          >
-            עדכון כמות
-          </button>
           <button type="button" onClick={onMarkUsed} disabled={busy || disabled}>
-            {busy && <Spinner />} נוצל
-          </button>
-          <button type="button" onClick={onMarkExpired} disabled={busy || disabled}>
-            {busy && <Spinner />} פג תוקף
+            {busy && <Spinner />} נוצל במלואו
           </button>
           <button type="button" onClick={onMarkDiscarded} disabled={busy || disabled}>
             הושלך

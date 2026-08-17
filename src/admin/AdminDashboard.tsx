@@ -5,6 +5,7 @@ import { WasteReport } from "./WasteReport";
 import { ManageAdminAccess } from "./ManageAdminAccess";
 import { TeamManagement } from "./TeamManagement";
 import { ProductsManagement } from "./ProductsManagement";
+import { PendingPriceBanner } from "./PendingPriceBanner";
 import { EnvBadge } from "../components/EnvBadge";
 
 type Tab = "report" | "auditLog" | "access" | "team" | "products";
@@ -12,6 +13,12 @@ type Tab = "report" | "auditLog" | "access" | "team" | "products";
 export function AdminDashboard() {
   const { signOut } = useAuth();
   const [tab, setTab] = useState<Tab>("report");
+  const [focusIngredients, setFocusIngredients] = useState(false);
+
+  function goToIngredients() {
+    setTab("products");
+    setFocusIngredients(true);
+  }
 
   return (
     <main dir="rtl" className="dashboard">
@@ -25,6 +32,8 @@ export function AdminDashboard() {
         </div>
       </header>
 
+      <PendingPriceBanner onGoToIngredients={goToIngredients} />
+
       <div className="dashboard-toolbar">
         <button
           type="button"
@@ -35,7 +44,10 @@ export function AdminDashboard() {
         </button>
         <button
           type="button"
-          onClick={() => setTab("products")}
+          onClick={() => {
+            setTab("products");
+            setFocusIngredients(false);
+          }}
           aria-pressed={tab === "products"}
         >
           מוצרים ומתכונים
@@ -64,7 +76,7 @@ export function AdminDashboard() {
       </div>
 
       {tab === "report" && <WasteReport />}
-      {tab === "products" && <ProductsManagement />}
+      {tab === "products" && <ProductsManagement focusIngredients={focusIngredients} />}
       {tab === "auditLog" && <AuditLogViewer />}
       {tab === "access" && <ManageAdminAccess />}
       {tab === "team" && <TeamManagement />}

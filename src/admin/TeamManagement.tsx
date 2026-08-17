@@ -11,6 +11,7 @@ export interface Staff {
   id: string;
   name: string;
   active: boolean;
+  isShiftManager: boolean;
 }
 
 /**
@@ -33,6 +34,7 @@ export function TeamManagement() {
           id: d.id,
           name: d.data().name,
           active: d.data().active,
+          isShiftManager: d.data().isShiftManager ?? false,
         })),
       );
     });
@@ -48,6 +50,7 @@ export function TeamManagement() {
         staffId: member.id,
         name: member.name,
         active: !member.active,
+        isShiftManager: member.isShiftManager,
       });
     } catch (err) {
       setError(describeError(err));
@@ -69,13 +72,16 @@ export function TeamManagement() {
       {error && <p className="error-text">{error}</p>}
 
       {staff.length === 0 ? (
-        <p>אין עדיין עובדי משמרת רשומים</p>
+        <p>אין עדיין עובדים רשומים</p>
       ) : (
         <ul className="batch-list">
           {staff.map((member) => (
             <li key={member.id} className="batch-row">
               <div className="batch-info">
                 <strong>{member.name}</strong>
+                {member.isShiftManager && (
+                  <span className="reminder-badge">מנהל/ת משמרת</span>
+                )}
                 <span>{member.active ? "פעיל/ה" : "לא פעיל/ה"}</span>
               </div>
               <div className="batch-actions">

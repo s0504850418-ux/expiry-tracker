@@ -118,6 +118,7 @@ before(async () => {
     await business.collection("staff").doc(STAFF_ID).set({
       name: "דנה",
       active: true,
+      isShiftManager: true,
     });
     await business.collection("staffSecrets").doc(STAFF_ID).set({
       hash: bcrypt.hashSync(STAFF_PIN, 12),
@@ -250,6 +251,7 @@ test("setStaffPin: owner יכול ליצור עובד/ת חדש/ה, וה-PIN ה�
       name: "יוסי",
       pin: "1111",
       active: true,
+      isShiftManager: true,
     }),
   );
 
@@ -261,11 +263,11 @@ test("setStaffPin: owner יכול ליצור עובד/ת חדש/ה, וה-PIN ה�
   assert.ok(data.token);
 });
 
-test("setStaffPin: יצירה חדשה דורשת PIN; עדכון שם/סטטוס בלי PIN לא נוגע ב-PIN הקיים; השבתה חוסמת כניסה", async () => {
+test("setStaffPin: מנהל/ת משמרת חדש/ה דורש PIN; עדכון שם/סטטוס בלי PIN לא נוגע ב-PIN הקיים; השבתה חוסמת כניסה", async () => {
   const setStaffPin = httpsCallable(functions, "setStaffPin");
   const verifyStaffPin = httpsCallable(functions, "verifyStaffPin");
 
-  // יצירת עובד/ת חדש/ה בלי PIN נדחית.
+  // יצירת מנהל/ת משמרת חדש/ה בלי PIN נדחית.
   await assert.rejects(
     () =>
       callAsOwner(() =>
@@ -274,6 +276,7 @@ test("setStaffPin: יצירה חדשה דורשת PIN; עדכון שם/סטטו�
           staffId: "staff3",
           name: "מיכל",
           active: true,
+          isShiftManager: true,
         }),
       ),
     (err) => {
@@ -289,6 +292,7 @@ test("setStaffPin: יצירה חדשה דורשת PIN; עדכון שם/סטטו�
       name: "מיכל",
       pin: "2222",
       active: true,
+      isShiftManager: true,
     }),
   );
 
@@ -299,6 +303,7 @@ test("setStaffPin: יצירה חדשה דורשת PIN; עדכון שם/סטטו�
       staffId: "staff3",
       name: "מיכל כהן",
       active: true,
+      isShiftManager: true,
     }),
   );
   const { data: stillWorks } = await verifyStaffPin({
@@ -315,10 +320,100 @@ test("setStaffPin: יצירה חדשה דורשת PIN; עדכון שם/סטטו�
       staffId: "staff3",
       name: "מיכל כהן",
       active: false,
+      isShiftManager: true,
     }),
   );
   await assert.rejects(
     () => verifyStaffPin({ businessId: BUSINESS_ID, staffId: "staff3", pin: "2222" }),
+    (err) => {
+      assert.equal(err.code, "functions/not-found");
+      return true;
+    },
+  );
+});
+
+test("setStaffPin: הפרדת עובד/ת רגיל/ה ממנהל/ת משמרת — יצירה בלי PIN, קידום, הורדה", async () => {
+  const setStaffPin = httpsCallable(functions, "setStaffPin");
+  const verifyStaffPin = httpsCallable(functions, "verifyStaffPin");
+  const listActiveStaffNames = httpsCallable(functions, "listActiveStaffNames");
+
+  // 1. עובד/ת רגיל/ה — נוצר/ת בלי PIN בהצלחה.
+  await callAsOwner(() =>
+    setStaffPin({
+      businessId: BUSINESS_ID,
+      staffId: "staff4",
+      name: "רועי",
+      active: true,
+      isShiftManager: false,
+    }),
+  );
+
+  // 2. עובד/ת רגיל/ה לא יכול/ה להתחבר עם PIN (אין לו/ה בכלל).
+  await assert.rejects(
+    () => verifyStaffPin({ businessId: BUSINESS_ID, staffId: "staff4", pin: "0000" }),
+    (err) => {
+      assert.equal(err.code, "functions/not-found");
+      return true;
+    },
+  );
+
+  // 3. onlyShiftManagers מסנן אותו החוצה; בלי הדגל הוא כלול.
+  const { data: onlyManagers } = await listActiveStaffNames({
+    businessId: BUSINESS_ID,
+    onlyShiftManagers: true,
+  });
+  assert.ok(!onlyManagers.staff.some((s) => s.staffId === "staff4"));
+  const { data: everyone } = await listActiveStaffNames({ businessId: BUSINESS_ID });
+  assert.ok(everyone.staff.some((s) => s.staffId === "staff4"));
+
+  // 4. קידום ל-isShiftManager:true בלי PIN נדחה.
+  await assert.rejects(
+    () =>
+      callAsOwner(() =>
+        setStaffPin({
+          businessId: BUSINESS_ID,
+          staffId: "staff4",
+          name: "רועי",
+          active: true,
+          isShiftManager: true,
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/invalid-argument");
+      return true;
+    },
+  );
+
+  // 5. קידום עם PIN — מצליח, ואפשר להתחבר.
+  await callAsOwner(() =>
+    setStaffPin({
+      businessId: BUSINESS_ID,
+      staffId: "staff4",
+      name: "רועי",
+      active: true,
+      isShiftManager: true,
+      pin: "1234",
+    }),
+  );
+  const { data: promoted } = await verifyStaffPin({
+    businessId: BUSINESS_ID,
+    staffId: "staff4",
+    pin: "1234",
+  });
+  assert.equal(promoted.token && true, true);
+
+  // 6. הורדה בחזרה ל-isShiftManager:false — ה-PIN הישן נמחק בפועל, לא רק מוסתר.
+  await callAsOwner(() =>
+    setStaffPin({
+      businessId: BUSINESS_ID,
+      staffId: "staff4",
+      name: "רועי",
+      active: true,
+      isShiftManager: false,
+    }),
+  );
+  await assert.rejects(
+    () => verifyStaffPin({ businessId: BUSINESS_ID, staffId: "staff4", pin: "1234" }),
     (err) => {
       assert.equal(err.code, "functions/not-found");
       return true;
@@ -1040,15 +1135,29 @@ test("createProduct: owner יוצר מוצר, ודוחה שם כפול (case-ins
     () => true,
   );
 
-  // shiftManager לא יכול ליצור מוצר
+  // shiftManager כן יכול/ה ליצור מוצר (שלוש רמות הרשאה, ראו CLAUDE.md
+  // ו-createProduct.ts) — אבל רק עם name/unit/shelfLifeMinutes.
+  const { data: staffCreated } = await callAsStaff(() =>
+    createProduct({
+      businessId: BUSINESS_ID,
+      name: "מוצר אחר",
+      unit: "kg",
+      shelfLifeMinutes: 60,
+    }),
+  );
+  assert.ok(staffCreated.productId);
+
+  // אבל שדות owner-only (התראה/תדירות עדכון) נדחים גם ביצירה, לא רק
+  // בעדכון (owner-only, כמו חיי מדף ומחיר).
   await assert.rejects(
     () =>
       callAsStaff(() =>
         createProduct({
           businessId: BUSINESS_ID,
-          name: "מוצר אחר",
+          name: "מוצר עם התראה ע\"י מנהל/ת משמרת",
           unit: "kg",
           shelfLifeMinutes: 60,
+          notifyBeforeExpiryMinutes: 60,
         }),
       ),
     (err) => {

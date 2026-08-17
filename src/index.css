@@ -477,6 +477,24 @@ label {
   border: 1px solid var(--color-warning-border);
 }
 
+/* פקד משני קטן בתוך .batch-info (לא כפתור פעולה ראשי) — עדכון כמות
+   ביניים, נגיש תמיד אבל לא תופס מקום בשורת הפעולות הראשית. */
+.batch-info-action {
+  align-self: flex-start;
+  min-height: 2.75rem; /* קטן מ---touch-target (52px) בכוונה — פקד משני, לא ראשי; עדיין ≥44px למגע אמין */
+  padding: 0.35rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: 999px;
+  background: transparent;
+  border: 1.5px dashed var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.batch-info-action.urgent-action {
+  border-style: solid;
+}
+
 .batch-actions {
   display: flex;
   gap: var(--space-2);

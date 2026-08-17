@@ -15,10 +15,16 @@ interface Props {
 
 export function StaffFormDialog({ staff, newStaffId, onClose, onSaved }: Props) {
   const [name, setName] = useState(staff?.name ?? "");
+  const [isShiftManager, setIsShiftManager] = useState(staff?.isShiftManager ?? false);
   const [pin, setPin] = useState("");
   const [active, setActive] = useState(staff?.active ?? true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // PIN חדש חובה כשאין PIN קודם לשמור — עובד/ת חדש/ה, או קידום עובד/ת
+  // רגיל/ה קיימ/ת שהייתה isShiftManager===false. עריכת מנהל/ת משמרת
+  // שכבר יש לו/ה PIN — הזנה ריקה משאירה את הקיים (כמו היום).
+  const pinRequired = isShiftManager && (!staff || !staff.isShiftManager);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -26,8 +32,8 @@ export function StaffFormDialog({ staff, newStaffId, onClose, onSaved }: Props) 
       setError("יש להזין שם");
       return;
     }
-    if (!staff && pin.length < 4) {
-      setError("יש להזין PIN בן 4 ספרות לפחות לעובד/ת חדש/ה");
+    if (pinRequired && pin.length < 4) {
+      setError("יש להזין PIN בן 4 ספרות לפחות למנהל/ת משמרת");
       return;
     }
     if (pin.length > 0 && pin.length < 4) {
@@ -43,6 +49,7 @@ export function StaffFormDialog({ staff, newStaffId, onClose, onSaved }: Props) 
         staffId: staff?.id ?? newStaffId,
         name: name.trim(),
         active,
+        isShiftManager,
         ...(pin.length > 0 ? { pin } : {}),
       });
       onSaved();
@@ -66,16 +73,31 @@ export function StaffFormDialog({ staff, newStaffId, onClose, onSaved }: Props) 
           autoFocus
         />
 
-        <label htmlFor="staff-pin">
-          {staff ? "PIN חדש (ריק = השארת ה-PIN הקיים)" : "PIN (לפחות 4 ספרות)"}
+        <label>
+          <input
+            type="checkbox"
+            checked={isShiftManager}
+            onChange={(e) => setIsShiftManager(e.target.checked)}
+          />
+          {" "}גם מנהל/ת משמרת (דורש PIN)
         </label>
-        <input
-          id="staff-pin"
-          type="password"
-          inputMode="numeric"
-          value={pin}
-          onChange={(e) => setPin(e.target.value)}
-        />
+
+        {isShiftManager && (
+          <>
+            <label htmlFor="staff-pin">
+              {staff?.isShiftManager
+                ? "PIN חדש (ריק = השארת ה-PIN הקיים)"
+                : "PIN (לפחות 4 ספרות)"}
+            </label>
+            <input
+              id="staff-pin"
+              type="password"
+              inputMode="numeric"
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+            />
+          </>
+        )}
 
         {staff && (
           <label>
@@ -84,7 +106,7 @@ export function StaffFormDialog({ staff, newStaffId, onClose, onSaved }: Props) 
               checked={active}
               onChange={(e) => setActive(e.target.checked)}
             />
-            {" "}פעיל/ה (יכול/ה להתחבר לטאבלט)
+            {" "}פעיל/ה (מוצג/ת ברשימות עובדים)
           </label>
         )}
 
