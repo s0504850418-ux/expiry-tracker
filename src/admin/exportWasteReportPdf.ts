@@ -6,7 +6,8 @@ const PRINT_ROOT_ID = "print-label-root";
 interface Summary {
   totalCost: number;
   wasteCost: number;
-  batchesWithoutCost: number;
+  batchesWithoutCostByReason: { noRecipe: number; unpricedIngredient: number };
+  productsAwaitingPrice: string[];
   byProduct: { productName: string; wasteCost: number; wasteBatchCount: number }[];
   byEmployee: EmployeeBreakdown[];
 }
@@ -61,6 +62,22 @@ export function exportWasteReportPdf({ startDate, endDate, batches, summary }: P
           : ""),
     ),
   );
+  if (summary.batchesWithoutCostByReason.noRecipe > 0) {
+    container.appendChild(
+      el(
+        "p",
+        `${summary.batchesWithoutCostByReason.noRecipe} אצוות בטווח בלי מתכון בזמן ההכנה — לא נכללות בסכומים.`,
+      ),
+    );
+  }
+  if (summary.productsAwaitingPrice.length > 0) {
+    container.appendChild(
+      el(
+        "p",
+        `מוצרים עם מרכיב הממתין למחיר (לא נכללים בחישוב): ${summary.productsAwaitingPrice.join(", ")}`,
+      ),
+    );
+  }
 
   const productHeading = el("h2", "פחת לפי מוצר");
   container.appendChild(productHeading);

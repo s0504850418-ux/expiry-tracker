@@ -21,7 +21,7 @@ export function AdminDashboard() {
   }
 
   return (
-    <main dir="rtl" className="dashboard">
+    <main dir="rtl" className="dashboard dashboard-admin">
       <header className="dashboard-header">
         <h1>מסך ניהול</h1>
         <div>
@@ -75,7 +75,7 @@ export function AdminDashboard() {
         </button>
       </div>
 
-      {tab === "report" && <WasteReport />}
+      {tab === "report" && <WasteReport onGoToIngredients={goToIngredients} />}
       {tab === "products" && <ProductsManagement focusIngredients={focusIngredients} />}
       {tab === "auditLog" && <AuditLogViewer />}
       {tab === "access" && <ManageAdminAccess />}

@@ -80,6 +80,21 @@ async function callAsStaff(fn) {
   }
 }
 
+// session "עובד/ת רגיל/ה" — הרמה הבסיסית ביותר בשלוש רמות ההרשאה, בלי
+// PIN/קוד (ראו startWorkerSession.ts). משמש כאן לבדוק שפעולות "מגדירים
+// מה מכינים" (מוצר/מרכיב/מתכון חדש) חסומות עבורו, לא רק ל-shiftManager
+// עם שדה אסור.
+async function callAsWorker(fn) {
+  const startWorkerSession = httpsCallable(functions, "startWorkerSession");
+  const { data } = await startWorkerSession({ businessId: BUSINESS_ID });
+  await signInWithCustomToken(auth, data.token);
+  try {
+    return await fn();
+  } finally {
+    await signOut(auth);
+  }
+}
+
 // מדמה "התחברות עם Google" בלי דפדפן/OAuth אמיתי: יוצרת (או משתמשת
 // ב-)משתמש ב-Auth Emulator עם email+emailVerified מוגדרים על רשומת
 // המשתמש עצמה — ה-ID token שינפיק כל sign-in לאותו uid (גם דרך
@@ -1670,6 +1685,157 @@ test("getRecipePreview: מחזירה כמויות-ליחידה בלי אף שד�
     getRecipePreview({ businessId: BUSINESS_ID, productId: product.productId }),
   );
   assert.equal(previewAsOwner.lines[0].perUnitQuantity, 4 / 20);
+});
+
+test("getRecipeVersionForEdit: מצנזר עלויות ל-shiftManager (השדות נעדרים לגמרי, לא רק null), owner מקבל הכל", async () => {
+  const createIngredient = httpsCallable(functions, "createIngredient");
+  const createProduct = httpsCallable(functions, "createProduct");
+  const createRecipeVersion = httpsCallable(functions, "createRecipeVersion");
+  const getRecipeVersionForEdit = httpsCallable(functions, "getRecipeVersionForEdit");
+
+  const { data: ingredient } = await callAsOwner(() =>
+    createIngredient({
+      businessId: BUSINESS_ID,
+      name: "מרכיב לבדיקת צנזור עריכה",
+      unit: "kg",
+      pricePerUnit: 7,
+    }),
+  );
+  const { data: product } = await callAsOwner(() =>
+    createProduct({
+      businessId: BUSINESS_ID,
+      name: "מוצר לבדיקת צנזור עריכה",
+      unit: "kg",
+      shelfLifeMinutes: 60,
+    }),
+  );
+  await callAsOwner(() =>
+    createRecipeVersion({
+      businessId: BUSINESS_ID,
+      productId: product.productId,
+      lines: [{ ingredientId: ingredient.ingredientId, quantity: 2 }],
+      yieldQuantity: 4,
+    }),
+  );
+
+  const { data: asOwner } = await callAsOwner(() =>
+    getRecipeVersionForEdit({ businessId: BUSINESS_ID, productId: product.productId }),
+  );
+  assert.equal(asOwner.hasRecipe, true);
+  assert.equal(asOwner.totalCostSnapshot, 14);
+  assert.equal(asOwner.costPerUnitSnapshot, 3.5);
+  assert.equal(asOwner.lines[0].pricePerUnitSnapshot, 7);
+  assert.equal(asOwner.lines[0].lineCostSnapshot, 14);
+
+  const { data: asStaff } = await callAsStaff(() =>
+    getRecipeVersionForEdit({ businessId: BUSINESS_ID, productId: product.productId }),
+  );
+  assert.equal(asStaff.hasRecipe, true);
+  assert.equal(asStaff.lines[0].ingredientId, ingredient.ingredientId);
+  assert.equal(asStaff.lines[0].quantity, 2);
+  assert.equal("totalCostSnapshot" in asStaff, false);
+  assert.equal("costPerUnitSnapshot" in asStaff, false);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(asStaff.lines[0], "pricePerUnitSnapshot"),
+    false,
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(asStaff.lines[0], "lineCostSnapshot"),
+    false,
+  );
+});
+
+test("listIngredients: מצנזר currentPricePerUnit ל-shiftManager (המפתח נעדר לגמרי), שניהם מקבלים priceStatus", async () => {
+  const createIngredient = httpsCallable(functions, "createIngredient");
+  const listIngredients = httpsCallable(functions, "listIngredients");
+
+  await callAsOwner(() =>
+    createIngredient({
+      businessId: BUSINESS_ID,
+      name: "מרכיב לבדיקת צנזור רשימה",
+      unit: "kg",
+      pricePerUnit: 9,
+    }),
+  );
+
+  const { data: asOwner } = await callAsOwner(() => listIngredients({ businessId: BUSINESS_ID }));
+  const ownerItem = asOwner.ingredients.find((i) => i.name === "מרכיב לבדיקת צנזור רשימה");
+  assert.equal(ownerItem.currentPricePerUnit, 9);
+  assert.equal(ownerItem.priceStatus, "set");
+
+  const { data: asStaff } = await callAsStaff(() => listIngredients({ businessId: BUSINESS_ID }));
+  const staffItem = asStaff.ingredients.find((i) => i.name === "מרכיב לבדיקת צנזור רשימה");
+  assert.equal(Object.prototype.hasOwnProperty.call(staffItem, "currentPricePerUnit"), false);
+  assert.equal(staffItem.priceStatus, "set");
+});
+
+test('worker role נדחה מכל פעולות "מגדירים מה מכינים" (createProduct/createIngredient/createRecipeVersion/updateProduct)', async () => {
+  const createProduct = httpsCallable(functions, "createProduct");
+  const createIngredient = httpsCallable(functions, "createIngredient");
+  const createRecipeVersion = httpsCallable(functions, "createRecipeVersion");
+  const updateProduct = httpsCallable(functions, "updateProduct");
+
+  await assert.rejects(
+    () =>
+      callAsWorker(() =>
+        createProduct({
+          businessId: BUSINESS_ID,
+          name: "מוצר ע\"י עובד/ת רגיל/ה",
+          unit: "kg",
+          shelfLifeMinutes: 60,
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/permission-denied");
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    () =>
+      callAsWorker(() =>
+        createIngredient({
+          businessId: BUSINESS_ID,
+          name: "מרכיב ע\"י עובד/ת רגיל/ה",
+          unit: "kg",
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/permission-denied");
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    () =>
+      callAsWorker(() =>
+        createRecipeVersion({
+          businessId: BUSINESS_ID,
+          productId: PRODUCT_ID,
+          lines: [{ ingredientId: "does-not-matter", quantity: 1 }],
+          yieldQuantity: 1,
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/permission-denied");
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    () =>
+      callAsWorker(() =>
+        updateProduct({
+          businessId: BUSINESS_ID,
+          productId: PRODUCT_ID,
+          shelfLifeMinutes: 120,
+        }),
+      ),
+    (err) => {
+      assert.equal(err.code, "functions/permission-denied");
+      return true;
+    },
+  );
 });
 
 test("נעילה זמנית אחרי כמה ניסיונות PIN כושלים רצופים", async () => {

@@ -99,6 +99,13 @@ function staffCtx(businessId, staffId = "staff1") {
   });
 }
 
+function workerCtx(businessId) {
+  return testEnv.authenticatedContext(`worker_${businessId}`, {
+    businessId,
+    role: "worker",
+  });
+}
+
 function anonCtx() {
   return testEnv.unauthenticatedContext();
 }
@@ -127,6 +134,23 @@ test("owner יכול לקרוא את כל האוספים בעסק שלו", async
 
 test("shiftManager יכול לקרוא רק מוצרים/אצוות/התראות, לא כספים/סגל/יומן", async () => {
   const db = staffCtx("businessA").firestore();
+  await assertSucceeds(db.doc("businesses/businessA").get());
+  await assertSucceeds(db.doc("businesses/businessA/products/prod1").get());
+  await assertSucceeds(db.doc("businesses/businessA/batches/batch1").get());
+  await assertSucceeds(
+    db.doc("businesses/businessA/notifications/notif1").get(),
+  );
+
+  await assertFails(db.doc("businesses/businessA/ingredients/ing1").get());
+  await assertFails(
+    db.doc("businesses/businessA/products/prod1/recipeVersions/v1").get(),
+  );
+  await assertFails(db.doc("businesses/businessA/staff/staff1").get());
+  await assertFails(db.doc("businesses/businessA/auditLog/log1").get());
+});
+
+test("worker (עובד/ת רגיל/ה, בלי PIN) יכול לקרוא רק מוצרים/אצוות/התראות, לא כספים/סגל/יומן — בדיוק כמו shiftManager", async () => {
+  const db = workerCtx("businessA").firestore();
   await assertSucceeds(db.doc("businesses/businessA").get());
   await assertSucceeds(db.doc("businesses/businessA/products/prod1").get());
   await assertSucceeds(db.doc("businesses/businessA/batches/batch1").get());

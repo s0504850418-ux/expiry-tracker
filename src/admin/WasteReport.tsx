@@ -36,6 +36,12 @@ interface ReportBatch {
   // null = אין נתון עלות (אין מתכון למוצר, או שהמתכון נשמר לפני הוספת
   // תפוקה/עלות-ליחידה).
   costSnapshot: number | null;
+  // למה costSnapshot הוא null, כשהוא null — שני מקרים שונים לגמרי
+  // שדורשים הודעה שונה למשתמש/ת (ראו PLAN_NEXT.md, סעיף ב.1):
+  // "noRecipe" = לא היה מתכון בכלל בזמן ההכנה, אין מה לעשות רטרואקטיבית.
+  // "unpricedIngredient" = יש מתכון, אבל אחד המרכיבים בו ממתין למחיר —
+  // ניתן לפעולה (השלמת מחיר), ולכן חייב קישור ישיר, לא רק הודעה.
+  costMissingReason: "noRecipe" | "unpricedIngredient" | null;
 }
 
 interface ProductBreakdown {
@@ -84,7 +90,11 @@ const REPORT_BATCH_LIMIT = 2000;
  * יכולה לשבת שם). מבוסס על preparedAtClient בטווח הנבחר — "מה נוצר
  * בתקופה הזו ומה קרה לו", לא "מה שונה סטטוס בתקופה הזו".
  */
-export function WasteReport() {
+interface Props {
+  onGoToIngredients?: () => void;
+}
+
+export function WasteReport({ onGoToIngredients }: Props) {
   const [startDate, setStartDate] = useState(defaultStart());
   const [endDate, setEndDate] = useState(toIsoDateInput(new Date()));
   const [busy, setBusy] = useState(false);
@@ -157,6 +167,8 @@ export function WasteReport() {
           : null;
         const costSnapshot =
           costPerUnitSnapshot !== null ? round2(costPerUnitSnapshot * preparedQuantity) : null;
+        const costMissingReason: ReportBatch["costMissingReason"] =
+          costSnapshot !== null ? null : recipeVersionId === null ? "noRecipe" : "unpricedIngredient";
         return {
           id: docSnap.id,
           productId: data.productId,
@@ -170,6 +182,7 @@ export function WasteReport() {
           preparedByStaffId: (data.preparedByStaffId as string | null | undefined) ?? null,
           preparedByNameSnapshot: (data.preparedByNameSnapshot as string | undefined) ?? null,
           costSnapshot,
+          costMissingReason,
         };
       });
 
@@ -229,10 +242,24 @@ export function WasteReport() {
             {summary.totalCost > 0 &&
               `(${((summary.wasteCost / summary.totalCost) * 100).toFixed(1)}% מהשווי הכולל)`}
           </p>
-          {summary.batchesWithoutCost > 0 && (
-            <p>
-              {summary.batchesWithoutCost} אצוות בטווח בלי נתון עלות (למוצר לא
-              היה מתכון בזמן היצירה) — לא נכללות בסכומי השווי.
+          {summary.batchesWithoutCostByReason.noRecipe > 0 && (
+            <p className="warning-text">
+              {summary.batchesWithoutCostByReason.noRecipe} אצוות בטווח בלי
+              מתכון בזמן ההכנה — לא ניתן לחשב עלות רטרואקטיבית, לא נכללות
+              בסכומי השווי.
+            </p>
+          )}
+          {summary.batchesWithoutCostByReason.unpricedIngredient > 0 && (
+            <p className="warning-text">
+              {summary.batchesWithoutCostByReason.unpricedIngredient} אצוות
+              בטווח הוכנו לפי מתכון עם מרכיב שממתין למחיר (
+              {summary.productsAwaitingPrice.join(", ")}) — לכן לא נכללות
+              בחישוב.{" "}
+              {onGoToIngredients && (
+                <button type="button" onClick={onGoToIngredients}>
+                  השלמת מחירים
+                </button>
+              )}
             </p>
           )}
 
@@ -303,7 +330,8 @@ export function WasteReport() {
 function summarize(batches: ReportBatch[]) {
   let totalCost = 0;
   let wasteCost = 0;
-  let batchesWithoutCost = 0;
+  const batchesWithoutCostByReason = { noRecipe: 0, unpricedIngredient: 0 };
+  const productsAwaitingPriceSet = new Set<string>();
   const byProductMap = new Map<string, ProductBreakdown>();
   const byEmployeeMap = new Map<
     string,
@@ -312,7 +340,12 @@ function summarize(batches: ReportBatch[]) {
 
   for (const b of batches) {
     if (b.costSnapshot === null) {
-      batchesWithoutCost += 1;
+      if (b.costMissingReason === "unpricedIngredient") {
+        batchesWithoutCostByReason.unpricedIngredient += 1;
+        productsAwaitingPriceSet.add(b.productNameSnapshot);
+      } else {
+        batchesWithoutCostByReason.noRecipe += 1;
+      }
       continue;
     }
     totalCost += b.costSnapshot;
@@ -368,7 +401,14 @@ function summarize(batches: ReportBatch[]) {
     }))
     .sort((a, b) => b.wasteCost - a.wasteCost);
 
-  return { totalCost, wasteCost, batchesWithoutCost, byProduct, byEmployee };
+  return {
+    totalCost,
+    wasteCost,
+    batchesWithoutCostByReason,
+    productsAwaitingPrice: [...productsAwaitingPriceSet].sort(),
+    byProduct,
+    byEmployee,
+  };
 }
 
 export type { ReportBatch, ProductBreakdown, EmployeeBreakdown };
