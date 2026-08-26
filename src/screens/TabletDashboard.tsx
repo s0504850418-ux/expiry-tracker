@@ -21,10 +21,8 @@ import { useOnlineStatus } from "../lib/useOnlineStatus";
 import { EnvBadge } from "../components/EnvBadge";
 import { needsDailyQuantityUpdate } from "../lib/quantityReminder";
 import { describeError } from "../lib/describeError";
-import { TeamManagement } from "../admin/TeamManagement";
 import { ProductsManagement } from "../admin/ProductsManagement";
 import { StaffLoginDialog } from "./StaffLoginDialog";
-import { OwnerLoginDialog } from "./OwnerLoginDialog";
 
 const ROLE_LABEL: Record<string, string> = {
   owner: "בעל/ת העסק",
@@ -56,10 +54,8 @@ export function TabletDashboard() {
   const [focusedBatchId, setFocusedBatchId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [showTeamManagement, setShowTeamManagement] = useState(false);
   const [showProductsManagement, setShowProductsManagement] = useState(false);
   const [showStaffLogin, setShowStaffLogin] = useState(false);
-  const [showOwnerLogin, setShowOwnerLogin] = useState(false);
   const online = useOnlineStatus();
 
   function flashToast(message: string) {
@@ -67,14 +63,13 @@ export function TabletDashboard() {
     window.setTimeout(() => setToast(null), 2500);
   }
 
-  // סוגר את דיאלוג "כניסה כמנהל/ת משמרת/בעל/ת העסק" אוטומטית ברגע
-  // שההתחברות הצליחה בפועל (claims כבר לא worker) — לא צריך כפתור
-  // "סגירה" נוסף אחרי login מוצלח.
+  // סוגר את דיאלוג "כניסה כמנהל/ת משמרת" אוטומטית ברגע שההתחברות
+  // הצליחה בפועל (claims כבר לא worker) — לא צריך כפתור "סגירה" נוסף
+  // אחרי login מוצלח.
   const prevRoleRef = useRef(claims?.role);
   useEffect(() => {
     if (prevRoleRef.current === "worker" && claims?.role && claims.role !== "worker") {
       setShowStaffLogin(false);
-      setShowOwnerLogin(false);
     }
     prevRoleRef.current = claims?.role;
   }, [claims?.role]);
@@ -181,7 +176,7 @@ export function TabletDashboard() {
   }
 
   return (
-    <main dir="rtl" className="dashboard">
+    <main dir="rtl" className="dashboard dashboard-tablet">
       {toast && (
         <div className="toast-stack">
           <div className="toast toast-success">{toast}</div>
@@ -193,27 +188,17 @@ export function TabletDashboard() {
         <div>
           <EnvBadge />
           <span>{ROLE_LABEL[claims?.role ?? "worker"]}</span>
-          {(claims?.role === "shiftManager" || claims?.role === "owner") && (
+          {claims?.role === "shiftManager" && (
             <button type="button" onClick={() => setShowProductsManagement(true)}>
               מוצרים ומרכיבים
             </button>
           )}
-          {claims?.role === "owner" && (
-            <button type="button" onClick={() => setShowTeamManagement(true)}>
-              ניהול צוות
+          {claims?.role === "worker" && (
+            <button type="button" onClick={() => setShowStaffLogin(true)}>
+              כניסה כמנהל/ת משמרת
             </button>
           )}
-          {claims?.role === "worker" && (
-            <>
-              <button type="button" onClick={() => setShowStaffLogin(true)}>
-                כניסה כמנהל/ת משמרת
-              </button>
-              <button type="button" onClick={() => setShowOwnerLogin(true)}>
-                כניסה כבעל/ת העסק
-              </button>
-            </>
-          )}
-          {(claims?.role === "shiftManager" || claims?.role === "owner") && (
+          {claims?.role === "shiftManager" && (
             <button type="button" onClick={() => signOut()}>
               יציאה
             </button>
@@ -222,27 +207,7 @@ export function TabletDashboard() {
       </header>
 
       {showStaffLogin && (
-        <StaffLoginDialog
-          onClose={() => setShowStaffLogin(false)}
-          onSwitchToOwnerLogin={() => {
-            setShowStaffLogin(false);
-            setShowOwnerLogin(true);
-          }}
-        />
-      )}
-      {showOwnerLogin && <OwnerLoginDialog onClose={() => setShowOwnerLogin(false)} />}
-
-      {showTeamManagement && (
-        <div className="dialog-backdrop" dir="rtl">
-          <div className="dialog">
-            <TeamManagement />
-            <div className="dialog-actions">
-              <button type="button" onClick={() => setShowTeamManagement(false)}>
-                סגירה
-              </button>
-            </div>
-          </div>
-        </div>
+        <StaffLoginDialog onClose={() => setShowStaffLogin(false)} />
       )}
 
       {showProductsManagement && (
@@ -270,7 +235,7 @@ export function TabletDashboard() {
       {products.length === 0 && online && (
         <p className="warning-text">
           עדיין אין מוצרים מוגדרים בעסק, ולכן אי אפשר ליצור אצווה.{" "}
-          {claims?.role === "owner" || claims?.role === "shiftManager"
+          {claims?.role === "shiftManager"
             ? 'יש להוסיף מוצר דרך כפתור "מוצרים ומרכיבים" למעלה.'
             : "יש לפנות למנהל/ת משמרת או לבעל/ת העסק כדי שיוסיפו מוצר."}
         </p>

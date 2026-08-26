@@ -68,7 +68,7 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-expiry-tracker \
 npm run dev
 ```
 
-כניסה כבעל/ת עסק: קוד `123456` (בטאבלט) או Google עם `you@example.com` (ב-`/admin`, אחרי שנרשם ב-`--ownerEmail`).
+כניסה כבעל/ת עסק: Google עם `you@example.com` ב-`/admin` בלבד (אחרי שנרשם ב-`--ownerEmail`) — אין כניסת בעלים מהטאבלט (ראו CLAUDE.md). קוד המנהל `123456` עדיין נדרש ע"י `bootstrapBusiness.ts` (נשמר בשרת), אבל אין UI שמשתמש בו.
 
 ## בדיקות ותקינות (בדיוק מה שרץ ב-CI)
 

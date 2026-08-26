@@ -13,8 +13,8 @@
 
 אין הרשמת משתמשים פתוחה. זיהוי מתבצע כך:
 
-1. **בעל עסק** מזין "קוד מנהל" (owner code) שנקבע מראש. **מנהל/ת משמרת** מזינה PIN אישי.
-2. הקוד/PIN נשלחים ל-Cloud Function ניתנת-לקריאה (`verifyOwnerCode` / `verifyStaffPin`) שמאמתת אותם מול hash (bcrypt) השמור בצד השרת בלבד — לעולם לא נשלח/נשמר בטקסט גלוי, ולעולם לא נגיש לקריאה מהלקוח.
+1. **בעל/ת העסק** מתחבר/ת ל-`/admin` עם **Google** (כתובת Gmail מורשית מראש, ראו `secrets/googleAccess` למטה) — **לא** מהטאבלט. **מנהל/ת משמרת** מזינה PIN אישי בטאבלט.
+2. ה-PIN נשלח ל-Cloud Function ניתנת-לקריאה (`verifyStaffPin`) שמאמתת אותו מול hash (bcrypt) השמור בצד השרת בלבד — לעולם לא נשלח/נשמר בטקסט גלוי, ולעולם לא נגיש לקריאה מהלקוח. **`verifyOwnerCode`/"קוד מנהל" עדיין קיימים בשרת** (נבדקים ב-`tests/functions.test.js`, ומשמשים את `bootstrapBusiness.ts` ליצירת העסק הראשוני) — אבל **אין להם עוד שום UI לקוח**; הוסרו מהטאבלט (ראו CLAUDE.md, "הסרת כניסת בעלים מהטאבלט") כי בעל/ת העסק כבר עובד/ת מ-`/admin` עם Google בפועל, וקיום הדרך השנייה רק בילבל.
 3. בהצלחה, הפונקציה יוצרת **custom token** של Firebase Auth עם **custom claims**: `{ businessId, role: 'owner' | 'shiftManager', staffId? }`. ה-uid נבנה דטרמיניסטית (`owner_{businessId}` או `staff_{businessId}_{staffId}`).
 4. הלקוח מתחבר עם ה-custom token (`signInWithCustomToken`). מרגע זה יש לו `request.auth` עם ה-claims, ולכן יכול **לקרוא** (בלבד) את מה שמותר לו לפי Firestore Rules.
 5. כל פעולה שמשנה נתונים (יצירת אצווה, שינוי סטטוס, יצירת מוצר, שינוי מחיר וכו') **עדיין** עוברת דרך Cloud Function ייעודית שמאמתת את ה-role מתוך ה-ID token ומבצעת את הכתיבה בעצמה עם Admin SDK. הלקוח **לעולם** לא כותב ל-Firestore ישירות.

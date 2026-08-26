@@ -14,7 +14,6 @@ interface StaffOption {
 
 interface Props {
   onClose: () => void;
-  onSwitchToOwnerLogin: () => void;
 }
 
 function errorMessage(err: unknown): string {
@@ -28,9 +27,12 @@ function errorMessage(err: unknown): string {
  * מסך כניסה נפרד למנהל/ת משמרת — רשימת עובדים (רק מי שמסומן/ת
  * isShiftManager, ראו listActiveStaffNames({ onlyShiftManagers: true }))
  * ואז PIN, בלי שום שלב "בחירת תפקיד" מקדים (ראו CLAUDE.md: שלושה
- * מסכים נפרדים). נפתח כדיאלוג מתוך TabletDashboard.
+ * מסכים נפרדים). נפתח כדיאלוג מתוך TabletDashboard. **בעל/ת העסק לא
+ * יכול/ה להתחבר מהטאבלט בכלל** (הוסר, ראו CLAUDE.md) — לכן כשאין
+ * עדיין מנהלי משמרת רשומים, ההודעה רק מפנה למסך הניהול (`/admin`),
+ * בלי כפתור פעולה מהטאבלט עצמו.
  */
-export function StaffLoginDialog({ onClose, onSwitchToOwnerLogin }: Props) {
+export function StaffLoginDialog({ onClose }: Props) {
   const [mode, setMode] = useState<"picker" | "pin">("picker");
   const [staff, setStaff] = useState<StaffOption[]>([]);
   const [loadingStaff, setLoadingStaff] = useState(true);
@@ -110,15 +112,10 @@ export function StaffLoginDialog({ onClose, onSwitchToOwnerLogin }: Props) {
               </p>
             )}
             {!loadingStaff && staff.length === 0 && (
-              <>
-                <p className="warning-text">
-                  אין עדיין עובדי משמרת רשומים במערכת. הוספת עובד/ת דורשת קוד
-                  מנהל של בעל/ת העסק.
-                </p>
-                <button type="button" onClick={onSwitchToOwnerLogin}>
-                  מעבר להתחברות כבעל/ת העסק (להוספת עובד/ת)
-                </button>
-              </>
+              <p className="warning-text">
+                אין עדיין מנהלי משמרת רשומים במערכת. יש לפנות לבעל/ת העסק
+                להוספת מנהל/ת משמרת דרך מסך הניהול (`/admin`).
+              </p>
             )}
             {staff.map((s) => (
               <button
