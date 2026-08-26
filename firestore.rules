@@ -1,0 +1,108 @@
+rules_version = '2';
+
+// ראו DATA_MODEL.md להסבר מלא. עיקרון-על: אין כתיבה ישירה מהלקוח לשום
+// דבר רגיש — כל הכתיבות עוברות Cloud Functions עם Admin SDK, שעוקף את
+// החוקים האלה. חוקי הכתיבה כאן הם false כמעט תמיד, בכוונה, כהגנת עומק.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function claims() {
+      return request.auth.token;
+    }
+
+    function belongsToBusiness(businessId) {
+      return isSignedIn() && claims().businessId == businessId;
+    }
+
+    function isOwner(businessId) {
+      return belongsToBusiness(businessId) && claims().role == 'owner';
+    }
+
+    function isShiftManager(businessId) {
+      return belongsToBusiness(businessId) && claims().role == 'shiftManager';
+    }
+
+    // session שקוף בלי PIN/קוד (ראו startWorkerSession.ts) — הרמה
+    // הבסיסית ביותר בשלוש רמות ההרשאה (CLAUDE.md). מותר לו/לה לקרוא
+    // בדיוק את מה ש-shiftManager יכול/ה, לא יותר (ingredients/
+    // recipeVersions/staff/auditLog נשארים חסומים).
+    function isWorker(businessId) {
+      return belongsToBusiness(businessId) && claims().role == 'worker';
+    }
+
+    function isStaffOrOwner(businessId) {
+      return isOwner(businessId) || isShiftManager(businessId);
+    }
+
+    function isAnyMember(businessId) {
+      return isStaffOrOwner(businessId) || isWorker(businessId);
+    }
+
+    match /businesses/{businessId} {
+      allow read: if isAnyMember(businessId);
+      allow write: if false;
+
+      // סודות (owner code / staff PIN hashes) — חסום לחלוטין ללקוח, תמיד.
+      match /secrets/{secretId} {
+        allow read, write: if false;
+      }
+
+      match /staffSecrets/{staffId} {
+        allow read, write: if false;
+      }
+
+      // רשימת עובדים — ניהול כוח אדם, לבעלים בלבד.
+      match /staff/{staffId} {
+        allow read: if isOwner(businessId);
+        allow write: if false;
+      }
+
+      // מוצרים — גם מנהל/ת משמרת וגם עובד/ת רגיל/ה צריכים/ות לראות
+      // כדי ליצור/לסרוק אצוות. אין כאן נתון כספי.
+      match /products/{productId} {
+        allow read: if isAnyMember(businessId);
+        allow write: if false;
+
+        // עלויות מתכון — נתון כספי, לבעלים בלבד.
+        match /recipeVersions/{versionId} {
+          allow read: if isOwner(businessId);
+          allow write: if false;
+        }
+      }
+
+      // מרכיבים ומחירים — נתון כספי, לבעלים בלבד.
+      match /ingredients/{ingredientId} {
+        allow read: if isOwner(businessId);
+        allow write: if false;
+      }
+
+      // אצוות — הישות המרכזית, גלויה לשלושת התפקידים.
+      match /batches/{batchId} {
+        allow read: if isAnyMember(businessId);
+        allow write: if false;
+      }
+
+      // יומן פעולות — בלתי ניתן לעריכה מצד הלקוח, קריאה לבעלים בלבד.
+      match /auditLog/{logId} {
+        allow read: if isOwner(businessId);
+        allow write: if false;
+      }
+
+      // התראות בתוך המכשיר — גלויות לשלושת התפקידים.
+      match /notifications/{notificationId} {
+        allow read: if isAnyMember(businessId);
+        allow write: if false;
+      }
+    }
+
+    // כל מה שלא הוגדר במפורש למעלה — חסום כברירת מחדל.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

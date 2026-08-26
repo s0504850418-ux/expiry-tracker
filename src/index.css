@@ -1,0 +1,1013 @@
+/* ===== מערכת עיצוב =====
+   בלי ספריית UI חיצונית — CSS טהור, כדי לא לנפח את גודל החבילה.
+
+   שני "טעמים" ויזואליים חולקים את אותה מערכת רכיבים (button/input/
+   .dialog/.data-table וכו'), ומסתעפים דרך CSS custom properties
+   שמוגדרות-מחדש בשורש כל מסך: .dashboard-tablet (טאבלט מטבח — כפתורים
+   גדולים, ניגודיות גבוהה, קריא ממרחק, עמיד לתאורה חזקה) מול
+   .dashboard-admin (מסך ניהול — נקי, משרדי, צפוף יותר). כל רכיב
+   ש"לא יודע" על ההקשר (למשל דיאלוג שנפתח גם מהטאבלט וגם מהניהול)
+   ממשיך להיראות טוב בברירת המחדל של :root. ראו TabletDashboard.tsx /
+   AdminDashboard.tsx לשתי המחלקות האלה על ה-<main> הראשי של כל מסך —
+   זה שינוי ה-DOM היחיד שנדרש כדי לאפשר את ההפרדה הזו, בלי לגעת בשום
+   כפתור/טקסט/זרימה. */
+
+:root {
+  --color-bg: #eef1f6;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f6f8fb;
+  --color-border: #d7dbe3;
+  --color-border-strong: #b7bec9;
+  --color-text: #12151c;
+  --color-text-muted: #545d6e;
+
+  --color-primary: #1d4ed8;
+  --color-primary-hover: #1739a6;
+  --color-primary-soft: #e7edfc;
+  --color-primary-text: #ffffff;
+
+  --color-danger: #b91c1c;
+  --color-danger-bg: #fee2e2;
+  --color-danger-border: #dc2626;
+  --color-danger-strong: #7f1d1d;
+
+  --color-warning: #92400e;
+  --color-warning-bg: #fef3c7;
+  --color-warning-border: #d97706;
+
+  --color-success: #15803d;
+  --color-success-bg: #dcfce7;
+  --color-success-border: #16a34a;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  --font-size-base: 1.125rem; /* 18px — קריא ממרחק מטבח */
+  --touch-target: 3.25rem; /* ~52px — אזור לחיצה נדיב לאצבע */
+
+  --shadow-xs: 0 1px 2px rgba(16, 19, 30, 0.05);
+  --shadow-sm: 0 2px 8px rgba(16, 19, 30, 0.08);
+  --shadow-md: 0 8px 24px rgba(16, 19, 30, 0.12);
+  --shadow-lg: 0 18px 44px rgba(16, 19, 30, 0.18);
+  --shadow-modal: 0 24px 60px rgba(16, 19, 30, 0.32);
+
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* ===== טעם "טאבלט מטבח" =====
+   ניגודיות מוגברת, רדיוסים/צללים חזקים יותר לתחושה מוחשית, קנה מידה
+   טיפוגרפי מוגדל, וכחול בולט יותר — בלי לשנות שום מבנה/טקסט/כפתור,
+   רק את השפה הוויזואלית שמסביבם. */
+.dashboard-tablet {
+  --color-bg: #e6ebf4;
+  --color-primary: #163fc4;
+  --color-primary-hover: #0f2f9c;
+  --color-primary-soft: #e2eafc;
+  --radius-md: 13px;
+  --radius-lg: 20px;
+  --shadow-sm: 0 3px 10px rgba(10, 20, 60, 0.10);
+  --shadow-md: 0 12px 30px rgba(10, 20, 60, 0.16);
+  font-size: 1.05em;
+}
+
+/* ===== טעם "מסך ניהול" =====
+   נקי ומשרדי: גוון מאופק (indigo/slate) במקום הכחול הבולט של הטאבלט,
+   רדיוסים/צללים עדינים יותר, גבולות דקים, קנה מידה טיפוגרפי מעט קטן
+   יותר — היררכיה עדינה, לא "צועקת" כמו מסך העבודה במטבח. */
+.dashboard-admin {
+  --color-bg: #f6f7fa;
+  --color-surface-alt: #f1f2f6;
+  --color-border: #e3e5eb;
+  --color-border-strong: #c7cbd6;
+  --color-primary: #3c4a8f;
+  --color-primary-hover: #2e3a70;
+  --color-primary-soft: #eaecf7;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-xs: 0 1px 2px rgba(20, 23, 40, 0.03);
+  --shadow-sm: 0 1px 3px rgba(20, 23, 40, 0.05);
+  --shadow-md: 0 6px 18px rgba(20, 23, 40, 0.07);
+  font-size: 0.95em;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 100%;
+}
+
+body {
+  margin: 0;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Arial,
+    sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+h1 {
+  font-size: 1.75rem;
+}
+
+h2 {
+  font-size: 1.375rem;
+}
+
+h3 {
+  font-size: 1.125rem;
+}
+
+.dashboard-admin h1,
+.dashboard-admin h2,
+.dashboard-admin h3 {
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+p {
+  margin: 0;
+}
+
+/* ===== כפתורים ===== */
+
+button {
+  font: inherit;
+  font-weight: 600;
+  padding: 0.75rem 1.5rem;
+  min-height: var(--touch-target);
+  min-width: var(--touch-target);
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  box-shadow: var(--shadow-xs);
+  transition:
+    background-color var(--dur-fast, 0.15s),
+    border-color var(--dur-fast, 0.15s),
+    box-shadow var(--dur-fast, 0.15s),
+    transform 0.05s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.98) translateY(0);
+  box-shadow: var(--shadow-xs);
+}
+
+button:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* כפתור פעולה ראשי — submit בטפסים/דיאלוגים */
+button[type="submit"] {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-primary-text);
+  box-shadow: var(--shadow-sm);
+}
+
+button[type="submit"]:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+}
+
+.urgent-action {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger);
+}
+
+/* טאבלט: פעולות האצווה הראשיות מעט גדולות/בולטות יותר מהבסיס הכללי —
+   אצבע אחת, קריאה מהירה, בלי לגעת במספר/מיקום הכפתורים עצמם. */
+.dashboard-tablet .batch-actions button {
+  min-height: 3.75rem;
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+
+/* מסך ניהול: כפתורים מעט צנועים יותר — הקשר עכבר/מקלדת, לא אצבע. */
+.dashboard-admin button {
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.dashboard-admin button:hover:not(:disabled) {
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+/* ===== שדות קלט ===== */
+
+input,
+select,
+textarea {
+  font: inherit;
+  padding: 0.65rem 0.85rem;
+  min-height: var(--touch-target);
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+label {
+  font-weight: 600;
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+}
+
+/* ===== מסך התחברות / מצבי טעינה-שגיאה ברמת האפליקציה ===== */
+
+.login-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  min-height: 100vh;
+  justify-content: center;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 0%, var(--color-primary-soft), transparent 60%),
+    var(--color-bg);
+}
+
+.button-stack,
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 360px;
+}
+
+.login-form label {
+  text-align: start;
+}
+
+/* ===== מצבי משוב: שגיאה / הצלחה / אזהרה-מידע ===== */
+
+.error-text,
+.success-text,
+.warning-text {
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: var(--shadow-xs);
+}
+
+.error-text {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  border: 1.5px solid var(--color-danger-border);
+}
+
+.error-text::before {
+  content: "⚠";
+  flex-shrink: 0;
+}
+
+.success-text {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+  border: 1.5px solid var(--color-success-border);
+}
+
+.success-text::before {
+  content: "✓";
+  flex-shrink: 0;
+}
+
+/* מידע/אזהרה שאינם כשל בפועל (למשל "אין עדיין מתכון למוצר") — כתום,
+   לא אדום, כדי לא להיראות כמו שגיאה כשלמעשה שום דבר לא נכשל. */
+.warning-text {
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+  border: 1.5px solid var(--color-warning-border);
+}
+
+.warning-text::before {
+  content: "ℹ";
+  flex-shrink: 0;
+}
+
+.spinner {
+  display: inline-block;
+  width: 1.1em;
+  height: 1.1em;
+  border: 2.5px solid currentColor;
+  border-inline-end-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* טוסט הצלחה חולף (למשל אחרי עדכון סטטוס אצווה בטאבלט) */
+.toast-stack {
+  position: fixed;
+  top: var(--space-4);
+  inset-inline: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  z-index: 100;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  font-weight: 700;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  animation: toast-in 0.18s var(--ease);
+}
+
+.toast-success {
+  background: var(--color-success);
+  color: white;
+}
+
+.toast-success::before {
+  content: "✓";
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ===== מסגרת המסכים ===== */
+
+.dashboard {
+  padding: var(--space-4) var(--space-5);
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: 2px solid var(--color-border);
+}
+
+.dashboard-header > div {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* טאבלט: כותרת עבה/בולטת יותר, נצמדת למעלה כדי שתישאר נגישה כשגוללים
+   רשימת אצוות ארוכה במטבח עסוק. */
+.dashboard-tablet .dashboard-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--color-bg);
+  border-bottom: 3px solid var(--color-primary);
+  padding-top: var(--space-2);
+  margin-inline: calc(var(--space-5) * -1);
+  padding-inline: var(--space-5);
+}
+
+.dashboard-tablet .dashboard-header h1 {
+  font-size: 1.9rem;
+  font-weight: 800;
+}
+
+/* מסך ניהול: כותרת עדינה יותר, גבול דק, בלי sticky (תוכן טפסים/טבלאות
+   ארוך פחות דרמטית מרשימת אצוות חיה). */
+.dashboard-admin .dashboard-header {
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--space-3);
+}
+
+.env-badge {
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  border: 1px solid var(--color-warning-border);
+}
+
+.dashboard-toolbar {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.dashboard-toolbar input[type="search"] {
+  flex: 1;
+  min-width: 200px;
+}
+
+.dashboard-toolbar button[aria-pressed="true"] {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-primary-text);
+}
+
+/* מסך ניהול: הופך את שורת הלשוניות מ"כפתורים בגלולה" לפס לשוניות נקי
+   ומשרדי — קו תחתון במקום מסגרת מלאה. מכוון במפורש רק לכפתורי ניווט
+   אמיתיים (יש להם aria-pressed), כדי לא לגעת בכפתורי פעולה רגילים
+   שבמקרה יושבים בתוך אותה מחלקת .dashboard-toolbar (למשל "הפקת דוח"
+   בדוח הפחת). */
+.dashboard-admin .dashboard-toolbar:has(button[aria-pressed]) {
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 0;
+}
+
+.dashboard-admin .dashboard-toolbar button[aria-pressed] {
+  border: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: transparent;
+  box-shadow: none;
+  min-height: auto;
+  padding: 0.8rem 1.1rem;
+  color: var(--color-text-muted);
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+}
+
+.dashboard-admin .dashboard-toolbar button[aria-pressed]:hover:not(:disabled) {
+  color: var(--color-text);
+  background: var(--color-surface-alt);
+}
+
+.dashboard-admin .dashboard-toolbar button[aria-pressed="true"] {
+  background: transparent;
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+/* ===== רשימת אצוות (מסך הטאבלט) — גם רשימות דומות במסך הניהול
+   (למשל ניהול צוות) חוזרות על אותה מחלקה, ומקבלות אותו טיפול בסיסי. ===== */
+
+.batch-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.batch-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  border-inline-start: 8px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s var(--ease);
+}
+
+.batch-row.urgency-expired {
+  border-inline-start-color: var(--color-danger-border);
+  background: var(--color-danger-bg);
+}
+
+.batch-row.urgency-urgent {
+  border-inline-start-color: var(--color-danger-border);
+}
+
+.batch-row.urgency-soon {
+  border-inline-start-color: var(--color-warning-border);
+}
+
+.batch-row.urgency-ok {
+  border-inline-start-color: var(--color-success-border);
+}
+
+/* אצווה שפג תוקפה חייבת "לצעוק" מיד — לא להסתמך רק על צבע הגבול.
+   טבעת אור אדומה שפועמת לאט (2.2 שניות, בלי הבהוב מהיר) מסביב לשורה,
+   בנוסף לתגית מלאה-צבע ולסמל ✕ (ראו למטה) — שלוש שכבות שונות של
+   הדגשה (צבע + צורה/סמל + תנועה), לא רק צבע. מוגבל לטאבלט (שם מוצגת
+   רשימת האצוות בפועל) ומכבד prefers-reduced-motion. */
+.dashboard-tablet .batch-row.urgency-expired {
+  animation: urgency-pulse 2.2s ease-out infinite;
+}
+
+@keyframes urgency-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(185, 28, 28, 0.45), var(--shadow-sm);
+  }
+  50% {
+    box-shadow: 0 0 0 9px rgba(185, 28, 28, 0), var(--shadow-sm);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-tablet .batch-row.urgency-expired {
+    animation: none;
+    box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.35), var(--shadow-sm);
+  }
+}
+
+.batch-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.batch-info strong {
+  font-size: 1.3rem;
+}
+
+.batch-info > span {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+.dashboard-tablet .batch-info strong {
+  font-size: 1.55rem;
+  font-weight: 800;
+}
+
+.dashboard-tablet .batch-info > span {
+  font-size: 1.2rem;
+}
+
+.urgency-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  align-self: flex-start;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+}
+
+.urgency-expired .urgency-badge,
+.urgency-urgent .urgency-badge {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger-border);
+}
+
+.urgency-soon .urgency-badge {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  border: 1px solid var(--color-warning-border);
+}
+
+.urgency-ok .urgency-badge {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  border: 1px solid var(--color-success-border);
+}
+
+/* אייקונים עקביים עם השפה שכבר קיימת ב-.error-text/.success-text —
+   שכבת הדגשה נוספת שלא תלויה רק בצבע (נגישות: לא מסתמכים על הבחנת
+   צבע בלבד). ל"פג תוקף" תגית *מלאה*-צבע (לא רק מסגרת), הכי בולטת
+   מבין הארבע — התור החזותי: פג תוקף > דחוף > בקרוב > תקין. */
+.urgency-urgent .urgency-badge::before {
+  content: "⚠";
+}
+
+.urgency-ok .urgency-badge::before {
+  content: "✓";
+}
+
+.urgency-expired .urgency-badge {
+  background: var(--color-danger);
+  color: #fff;
+  border-color: var(--color-danger-strong);
+}
+
+.urgency-expired .urgency-badge::before {
+  content: "✕";
+}
+
+.dashboard-tablet .urgency-badge {
+  font-size: 0.95rem;
+  font-weight: 800;
+  padding: 0.3rem 0.9rem;
+}
+
+/* תזכורת ויזואלית: מוצר "כל סוף יום" שהכמות שלו לא עודכנה היום. לא
+   התראה חוצה-מכשירים (notifications collection) — רק סימון ברשימה. */
+.reminder-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  align-self: flex-start;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  border: 1px solid var(--color-warning-border);
+}
+
+/* פקד משני קטן בתוך .batch-info (לא כפתור פעולה ראשי) — עדכון כמות
+   ביניים, נגיש תמיד אבל לא תופס מקום בשורת הפעולות הראשית. */
+.batch-info-action {
+  align-self: flex-start;
+  min-height: 2.75rem; /* קטן מ---touch-target (52px) בכוונה — פקד משני, לא ראשי; עדיין ≥44px למגע אמין */
+  padding: 0.35rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: 999px;
+  background: transparent;
+  border: 1.5px dashed var(--color-border);
+  color: var(--color-text-muted);
+  box-shadow: none;
+}
+
+.batch-info-action:hover:not(:disabled) {
+  transform: none;
+  background: var(--color-surface-alt);
+}
+
+.batch-info-action.urgent-action {
+  border-style: solid;
+}
+
+.batch-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* עדכון כמות מהיר בתוך שורת האצווה — לא דיאלוג נפרד */
+.quantity-update-form {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.quantity-update-form label {
+  white-space: nowrap;
+}
+
+.quantity-update-form input {
+  max-width: 8rem;
+}
+
+.quantity-update-form .error-text {
+  flex-basis: 100%;
+}
+
+/* ===== דיאלוגים =====
+   עיצוב אחיד/מלוטש בכוונה בלי תלות בהקשר (טאבלט/ניהול) — חלק
+   מהדיאלוגים (כמו IngredientFormDialog כשנפתח מקונן בתוך עורך מתכון)
+   מוצגים דרך React Portal ישירות תחת <body>, מחוץ ל-.dashboard-tablet/
+   .dashboard-admin, ולכן לא יכולים לרשת עיצוב תלוי-הקשר ממילא. */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 13, 24, 0.55);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  z-index: 50;
+  animation: backdrop-in 0.15s ease-out;
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.dialog {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 440px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-modal);
+  animation: dialog-in 0.18s var(--ease);
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* דיאלוג רחב יותר — למסכים עם טבלאות (למשל "מוצרים ומרכיבים" כשהוא
+   מוטמע כדיאלוג בטאבלט, לא כמסך מלא כמו ב-/admin). */
+.dialog-wide {
+  max-width: 900px;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: flex-end;
+  margin-top: var(--space-2);
+}
+
+.recipe-line {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: var(--space-2);
+}
+
+.recipe-line-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.recipe-line-field label {
+  font-size: 0.85rem;
+}
+
+.recipe-line-field.ingredient {
+  flex: 2;
+  min-width: 140px;
+}
+
+.recipe-line-field.quantity {
+  flex: 1;
+  min-width: 80px;
+}
+
+.recipe-line .error-text {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+/* הסבר קצר צמוד לשדה (למשל תפוקת מתכון) — לא שגיאה/אזהרה */
+.field-hint {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin: 0 0 var(--space-2);
+}
+
+/* ===== פאנל התראות ===== */
+
+.notifications-panel {
+  background: var(--color-warning-bg);
+  border: 2px solid var(--color-warning-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  box-shadow: var(--shadow-xs);
+}
+
+.notifications-panel > p {
+  color: var(--color-warning);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.notifications-panel ul {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.notifications-panel li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  box-shadow: var(--shadow-xs);
+}
+
+/* ===== טבלאות (מסך הניהול) ===== */
+
+.table-scroll {
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.audit-table,
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.audit-table th,
+.data-table th {
+  background: var(--color-surface-alt);
+  font-weight: 700;
+  position: sticky;
+  top: 0;
+}
+
+.audit-table th,
+.audit-table td,
+.data-table th,
+.data-table td {
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-3);
+  text-align: start;
+}
+
+.audit-table tbody tr:nth-child(even),
+.data-table tbody tr:nth-child(even) {
+  background: var(--color-surface-alt);
+}
+
+.audit-table tbody tr:hover,
+.data-table tbody tr:hover {
+  background: var(--color-primary-soft);
+}
+
+.dashboard-admin .table-scroll {
+  border-radius: var(--radius-md);
+}
+
+.dashboard-admin .audit-table,
+.dashboard-admin .data-table {
+  font-size: 0.9rem;
+}
+
+/* ===== הדפסה ===== */
+
+#print-label-root {
+  display: none;
+}
+
+@media print {
+  body > *:not(#print-label-root) {
+    display: none !important;
+  }
+
+  #print-label-root {
+    display: block !important;
+  }
+
+  .printed-label {
+    text-align: center;
+  }
+
+  .printed-label img {
+    width: 150px;
+    height: 150px;
+  }
+
+  .printed-label-batch-id {
+    font-size: 0.7rem;
+    color: #555;
+  }
+
+  .printed-report {
+    direction: rtl;
+    font-family: Arial, sans-serif;
+  }
+
+  .printed-report table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+  }
+
+  .printed-report th,
+  .printed-report td {
+    border: 1px solid #999;
+    padding: 0.4rem;
+    text-align: start;
+    font-size: 0.85rem;
+  }
+}
+
+/* ===== מסכים קטנים (טאבלט במצב לאורך) ===== */
+
+@media (max-width: 640px) {
+  .dashboard {
+    padding: var(--space-3);
+  }
+
+  .dashboard-tablet .dashboard-header {
+    margin-inline: calc(var(--space-3) * -1);
+    padding-inline: var(--space-3);
+  }
+
+  .batch-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .batch-actions {
+    justify-content: stretch;
+  }
+
+  .batch-actions button {
+    flex: 1;
+  }
+}
